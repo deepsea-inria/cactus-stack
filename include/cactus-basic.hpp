@@ -100,7 +100,32 @@ namespace cactus_stack {
       /*------------------------------*/
       /* Frame */
       
+      using call_link_type = enum {
+        Call_link_async, Call_link_sync
+      };
       
+      using frame_header_ext_type = struct {
+        call_link_type clt;
+        struct frame_header_struct* pred;
+        struct frame_header_struct* succ;
+      };
+      
+      using frame_header_type = struct frame_header_struct {
+        struct frame_header_struct* pred;
+        frame_header_ext_type ext;
+      };
+      
+      template <class T=char>
+      T* frame_data(frame_header_type* p) {
+        char* r = (char*)p;
+        if (r != nullptr) {
+          /* later: need to change sizeof(...) calculation if
+           * we switch to using variable-length frame-headers
+           */
+          r += sizeof(frame_header_type);
+        }
+        return (T*)r;
+      }
       
       /* Frame */
       /*------------------------------*/
@@ -110,7 +135,141 @@ namespace cactus_stack {
     /*------------------------------*/
     /* Stack */
     
-        
+    using stack_type = struct {
+      frame_header_type* fp, * sp, * lp;
+      frame_header_type* mhd, * mtl;
+    };
+    
+    stack_type create_stack() {
+      return {
+        .fp = nullptr, .sp = nullptr, .lp = nullptr,
+        .mhd = nullptr, .mtl = nullptr
+      };
+    }
+    
+    bool empty(stack_type s) {
+      return s.fp == nullptr;
+    }
+    
+    template <class Frame>
+    Frame* peek_back(stack_type s) {
+      return (Frame*)frame_data(s.fp);
+    }
+    
+    template <class Frame>
+    Frame* peek_mark(stack_type s) {
+      return (Frame*)frame_data(s.mhd);
+    }
+    
+    using parent_link_type = enum {
+      Parent_link_async, Parent_link_sync
+    };
+    
+    template <int frame_szb, class Initialize_fn>
+    stack_type push_back(stack_type s, parent_link_type ty,
+                         const Initialize_fn& initialize_fn) {
+      stack_type t;
+      auto b = sizeof(frame_header_type) + frame_szb;
+      t.fp = s.sp;
+      t.sp = (frame_header_type*)((char*)t.fp + b);
+      if (t.sp >= t.lp) {
+        chunk_type* c = create_chunk(s.sp, s.lp);
+        t.fp = (frame_header_type*)chunk_data(c);
+        t.sp = (frame_header_type*)((char*)t.fp + b);
+        t.lp = (frame_header_type*)((char*)c + K);
+      }
+      initialize_fn(frame_data(t.fp));
+      frame_header_ext_type fhe;
+      switch (ty) {
+        case Parent_link_async: {
+          fhe.clt = Call_link_async;
+          fhe.pred = s.mtl;
+          fhe.succ = nullptr;
+          if (s.mtl != nullptr) {
+            s.mtl->ext.clt = Call_link_async;
+            s.mtl->ext.succ = t.fp;
+          }
+          t.mtl = t.fp;
+          if (t.mhd == nullptr) {
+            t.mhd = t.mtl;
+          }
+          break;
+        }
+        case Parent_link_sync: {
+          fhe.clt = Call_link_sync;
+          break;
+        }
+      }
+      t.fp->pred = s.fp;
+      t.fp->ext = fhe;
+      return t;
+    }
+    
+    template <class Destruct_fn>
+    stack_type pop_back(stack_type s,
+                        const Destruct_fn& destruct_fn) {
+      stack_type t;
+      destruct_fn(frame_data(s.fp));
+      if (s.fp->ext.clt == Call_link_async) {
+        frame_header_type* pred = s.fp->ext.pred;
+        if (pred != nullptr) {
+          s.fp->ext.pred = pred->ext.pred;
+        }
+        t.mtl = pred;
+        if (pred == nullptr) {
+          t.mhd = nullptr;
+        }
+      }
+      t.fp = s.fp->pred;
+      chunk_type* c_fp = chunk_of(s.fp);
+      if (chunk_of(t.fp) == c_fp) {
+        t.sp = s.fp;
+        t.lp = s.lp;
+      } else {
+        t.sp = c_fp->hdr.sp;
+        t.lp = c_fp->hdr.lp;
+        decr_refcount(c_fp);
+      }
+      return t;
+    }
+    
+    std::pair<stack_type, stack_type> fork_mark(stack_type s) {
+      stack_type s1 = s;
+      stack_type s2 = create_stack();
+      if (s.mhd == nullptr) {
+        return std::make_pair(s1, s2);
+      }
+      frame_header_type* p_f1, * p_f2;
+      if (s.mhd->pred == nullptr) {
+        if (s.mhd->ext.succ == nullptr) {
+          return std::make_pair(s1, s2);
+        } else {
+          s.mhd->ext.pred = nullptr;
+          p_f2 = s.mhd->ext.succ;
+          s1.mhd = s.mhd;
+        }
+      } else {
+        p_f2 = s.mhd;
+        s1.mhd = nullptr;
+      }
+      p_f1 = p_f2->pred;
+      s1.fp = p_f1;
+      chunk_type* c_sp = chunk_of(s.sp);
+      if (c_sp == chunk_of(p_f1)) {
+        s1.sp = p_f2;
+        incr_refcount(c_sp);
+      } else {
+        s1.sp = nullptr;
+      }
+      s1.lp = s1.sp;
+      s1.mtl = s1.mhd;
+      s2 = s;
+      s2.mhd = p_f2;
+      p_f2->pred = nullptr;
+      p_f2->ext.pred = nullptr;
+      return std::make_pair(s1, s2);
+    }
+ 
     /* Stack */
     /*------------------------------*/
     
