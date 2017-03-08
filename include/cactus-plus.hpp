@@ -11,11 +11,11 @@
 #include <atomic>
 #include <assert.h>
 
-#ifndef _ENCORE_CACTUS_H_
-#define _ENCORE_CACTUS_H_
+#ifndef _CACTUS_STACK_PLUS_H_
+#define _CACTUS_STACK_PLUS_H_
 
-namespace encore {
-  namespace cactus {
+namespace cactus_stack {
+  namespace plus {
     
     namespace {
       
@@ -296,4 +296,4 @@ namespace encore {
   } // end namespace
 } // end namespace
 
-#endif /*! _ENCORE_CACTUS_H_ */
+#endif /*! _CACTUS_STACK_PLUS_H_ */

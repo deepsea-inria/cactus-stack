@@ -11,10 +11,10 @@
 #include <memory>
 #include <deque>
 
-#include "cactus.hpp"
+#include "cactus-plus.hpp"
 
-namespace encore {
-  namespace cactus {
+namespace cactus_stack {
+  namespace plus {
     
     /*------------------------------*/
     /* Frame */
@@ -424,7 +424,7 @@ namespace encore {
 } // end namespace
 
 int main(int argc, const char * argv[]) {
-  encore::cactus::machine_config_type tt;
+  cactus_stack::plus::machine_config_type tt;
   std::cout << "Hello, World!\n";
   return 0;
 }
