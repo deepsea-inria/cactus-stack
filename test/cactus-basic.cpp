@@ -126,6 +126,7 @@ namespace cactus_stack {
     thread_config_type mk_thread_config(std::shared_ptr<trace_type> t) {
       thread_config_type tc;
       tc.t = t;
+      tc.ms = create_stack();
       return tc;
     }
     
@@ -404,9 +405,9 @@ namespace cactus_stack {
       auto t2 = mk_push_back(f);
       t2->push_back.k = mk_pop_back();
       machine_config_type mc = mk_mc_thread(mk_thread_config(t2));
-      step([&] {
-        return rand() % 2 == 0;
-      }, mc);
+      mc = step([&] { return rand() % 2 == 0; }, mc);
+      check_consistent(mc);
+      mc = step([&] { return rand() % 2 == 0; }, mc);
       check_consistent(mc);
     }
     
