@@ -11,6 +11,7 @@
 #include <memory>
 #include <deque>
 #include <cmath>
+#include <string>
 
 #include "cactus-basic.hpp"
 
@@ -242,6 +243,40 @@ namespace cactus_stack {
         }
       }
       return n;
+    }
+    
+    void print_trace(trace_type& t, const std::string& prefix, bool is_tail) {
+      std::cout << (prefix + (is_tail ? "└── " : "├── "));
+      switch (t.tag) {
+        case Trace_fork_mark: {
+          std::cout << "*" << std::endl;
+          if (t.fork_mark.k1) {
+            print_trace(*t.fork_mark.k1, prefix + (is_tail ? "    " : "│   "), false);
+          }
+          if (t.fork_mark.k2) {
+            print_trace(*t.fork_mark.k2, prefix + (is_tail ?"    " : "│   "), true);
+          }
+          break;
+        }
+        case Trace_push_back: {
+          std::cout << "+" << std::endl;
+          break;
+        }
+        case Trace_pop_back: {
+          std::cout << "-" << std::endl;
+          break;
+        }
+        case Trace_nil: {
+          break;
+        }
+        default: {
+          assert(false);
+        }
+      }
+    }
+    
+    void print_trace(trace_type& t) {
+      print_trace(t, "", true);
     }
     
     /* Trace */
@@ -488,6 +523,14 @@ namespace cactus_stack {
       f.v = 123;
       auto t2 = mk_push_back(f);
       t2->push_back.k = mk_pop_back();
+      auto t3 = mk_fork_mark();
+      t3->fork_mark.k1 = t2;
+      t3->fork_mark.k2 = t2;
+      auto t4 = mk_fork_mark();
+      t4->fork_mark.k2 = t3;
+      t4->fork_mark.k1 = t3;
+      print_trace(*t4);
+      return;
       machine_config_type mc = mk_mc_thread(mk_thread_config(t2));
       mc = step([&] { return rand() % 2 == 0; }, mc);
       check_consistent(mc);
@@ -499,9 +542,7 @@ namespace cactus_stack {
 } // end namespace
 
 int main(int argc, const char * argv[]) {
-  std::cout << "starting\n";
-  //cactus_stack::basic::ex1();
-  cactus_stack::basic::check();
-  std::cout << "finished\n";
+  cactus_stack::basic::ex1();
+//  cactus_stack::basic::check();
   return 0;
 }
