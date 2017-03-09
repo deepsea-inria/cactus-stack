@@ -168,7 +168,7 @@ namespace cactus_stack {
     template <int frame_szb, class Initialize_fn>
     stack_type push_back(stack_type s, parent_link_type ty,
                          const Initialize_fn& initialize_fn) {
-      stack_type t;
+      stack_type t = s;
       auto b = sizeof(frame_header_type) + frame_szb;
       t.fp = s.sp;
       t.sp = (frame_header_type*)((char*)t.fp + b);
@@ -208,7 +208,7 @@ namespace cactus_stack {
     template <class Destruct_fn>
     stack_type pop_back(stack_type s,
                         const Destruct_fn& destruct_fn) {
-      stack_type t;
+      stack_type t = s;
       destruct_fn(frame_data(s.fp));
       if (s.fp->ext.clt == Call_link_async) {
         frame_header_type* pred = s.fp->ext.pred;
