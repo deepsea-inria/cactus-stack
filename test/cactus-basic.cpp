@@ -10,6 +10,7 @@
 #include <iostream>
 #include <memory>
 #include <deque>
+#include <cmath>
 
 #include "cactus-basic.hpp"
 
@@ -247,6 +248,45 @@ namespace cactus_stack {
     /*------------------------------*/
     
     /*------------------------------*/
+    /* Trace generator */
+    
+    std::shared_ptr<trace_type> gen_random_push_pop_seq(int nb_open_pushes, int len) {
+      std::shared_ptr<trace_type> r;
+      bool stop = (nb_open_pushes == 0) || (len == 0);
+      if ((rand() % (1<<nb_open_pushes)) == 0) {
+        frame f;
+        f.v = rand() % 1024;
+        r = mk_push_back(f);
+        if (! stop) {
+          r->push_back.k = gen_random_push_pop_seq(nb_open_pushes - 1, len - 1);
+        }
+      } else {
+        r = mk_pop_back();
+        if (! stop) {
+          r->pop_back.k = gen_random_push_pop_seq(nb_open_pushes, len - 1);
+        }
+      }
+      return r;
+    }
+    
+    std::shared_ptr<trace_type> gen_random_trace(int d) {
+      std::shared_ptr<trace_type> r;
+      if ((rand() % (1<<d)) == 0) {
+        r = mk_fork_mark();
+        r->fork_mark.k1 = gen_random_trace(d - 1);
+        r->fork_mark.k2 = gen_random_trace(d - 1);
+      } else {
+        static constexpr
+        int max_len_push_pop_seq = 20;
+        r = gen_random_push_pop_seq(0, max_len_push_pop_seq);
+      }
+      return r;
+    }
+    
+    /* Trace generator */
+    /*------------------------------*/
+    
+    /*------------------------------*/
     /* Stack-frame enumeration */
     
     using frame_addr_rng = std::pair<frame_header_type*, frame_header_type*>;
@@ -353,6 +393,12 @@ namespace cactus_stack {
       }, d);
     }
     
+    /* Stack-frame enumeration */
+    /*------------------------------*/
+    
+    /*------------------------------*/
+    /* Predicates */
+    
     bool is_consistent(thread_config_type& tc) {
       bool r = true;
       auto af_r = tc.rs;
@@ -396,7 +442,45 @@ namespace cactus_stack {
       }
     }
     
-    /* Stack-frame enumeration */
+    bool is_tail(std::shared_ptr<trace_type>& p_t) {
+      return p_t.get() == nullptr;
+    }
+    
+    bool is_tail(thread_config_type& tc) {
+      return is_tail(tc.t);
+    }
+    
+    bool is_finished(machine_config_type& mc) {
+      bool r = true;
+      switch (mc.tag) {
+        case Machine_fork_mark: {
+          r = r && is_finished(*mc.fork_mark.m1);
+          r = r && is_finished(*mc.fork_mark.m2);
+          break;
+        }
+        case Machine_thread: {
+          r = is_tail(mc.thread);
+          break;
+        }
+        case Machine_stuck: {
+          break;
+        }
+        default: {
+          assert(false);
+        }
+      }
+      return r;
+    }
+    
+    void check() {
+      machine_config_type mc = mk_mc_thread(mk_thread_config(gen_random_trace(0)));
+      while (! is_finished(mc)) {
+        check_consistent(mc);
+        mc = step([&] { return rand() % 2 == 0; }, mc);
+      }
+    }
+    
+    /* Predicates */
     /*------------------------------*/
     
     void ex1() {
@@ -416,7 +500,8 @@ namespace cactus_stack {
 
 int main(int argc, const char * argv[]) {
   std::cout << "starting\n";
-  cactus_stack::basic::ex1();
+  //cactus_stack::basic::ex1();
+  cactus_stack::basic::check();
   std::cout << "finished\n";
   return 0;
 }
