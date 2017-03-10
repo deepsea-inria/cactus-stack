@@ -28,6 +28,13 @@ namespace cactus_stack {
       parent_link_type plt;
     };
     
+    frame gen_random_frame() {
+      frame f;
+      f.v = rand() % 1024;
+      f.plt = ((rand() % 2 == 0) ? Parent_link_sync : Parent_link_async);
+      return f;
+    }
+    
     /* Frame */
     /*------------------------------*/
     
@@ -134,27 +141,19 @@ namespace cactus_stack {
           break;
         }
         case Trace_push_back: {
-          std::cout << "+[" << t->push_back.f.v << "]";
-          std::shared_ptr<trace_type> p = t->push_back.k;
-          while (p) {
-            if (p->tag == Trace_fork_mark) {
-              print_trace(p, "", true);
-              return;
-            } else if (p->tag == Trace_push_back) {
-              std::cout << " +[" << p->push_back.f.v << "]";
-              p = p->push_back.k;
-            } else if (p->tag == Trace_pop_back) {
-              std::cout << " -[]";
-              p = p->pop_back.k;
-            } else {
-              break;
-            }
+          auto plt = t->push_back.f.plt;
+          auto plt_s = (plt == Parent_link_async ? "A" : "S");
+          std::cout << "+[" << t->push_back.f.v << "](" << plt_s << ")" << std::endl;
+          if (t->push_back.k) {
+            print_trace(t->push_back.k, prefix + (is_tail ? "    " : "│   "), true);
           }
-          std::cout << std::endl;
           break;
         }
         case Trace_pop_back: {
-          assert(false); // impossible
+          std::cout << "-[]" << std::endl;
+          if (t->pop_back.k) {
+            print_trace(t->pop_back.k, prefix + (is_tail ? "    " : "│   "), true);
+          }
           break;
         }
         case Trace_nil: {
@@ -170,46 +169,54 @@ namespace cactus_stack {
       print_trace(t, "", true);
     }
     
-    std::shared_ptr<trace_type> gen_random_push_pop_seq(int nb_open_pushes) {
+    int position_of_top_async(const std::deque<frame>& fs) {
+      static constexpr
+      int not_found = -1;
+      int i = 0;
+      for (auto& f : fs) {
+        if (f.plt == Parent_link_async) {
+          return i;
+        }
+        i++;
+      }
+      return not_found;
+    }
+    
+    std::shared_ptr<trace_type> gen_random_trace(const std::deque<frame>& prefix, int d) {
       std::shared_ptr<trace_type> r;
-      if (nb_open_pushes == 0) {
+      auto n_p = prefix.size();
+      if (n_p == 0) {
         return r;
       }
-      if ((rand() % (1<<nb_open_pushes)) == 0) {
-        frame f;
-        f.v = rand() % 1024;
-        r = mk_push_back(f);
-        r->push_back.k = gen_random_push_pop_seq(nb_open_pushes + 1);
-      } else {
-        r = mk_pop_back();
-        r->pop_back.k = gen_random_push_pop_seq(nb_open_pushes - 1);
-      }
-      return r;
-    }
-    
-    std::shared_ptr<trace_type> gen_random_push_pop_seq() {
-      std::shared_ptr<trace_type> r;
-      frame f;
-      f.v = rand() % 1024;
-      r = mk_push_back(f);
-      r->push_back.k = gen_random_push_pop_seq(1);
-      return r;
-    }
-    
-    std::shared_ptr<trace_type> gen_random_trace(int d) {
-      std::shared_ptr<trace_type> r;
-      if ((rand() % (1<<d)) == 0) {
+      int posn = position_of_top_async(prefix);
+      if ((posn > 0) && ((rand() % (1 << d)) == 0)) {
         r = mk_fork_mark();
-        r->fork_mark.k1 = gen_random_trace(d + 1);
-        r->fork_mark.k2 = gen_random_trace(d + 1);
+        std::deque<frame> prefix1(prefix.begin(), prefix.begin() + posn);
+        std::deque<frame> prefix2(prefix.begin() + posn, prefix.end());
+        r->fork_mark.k1 = gen_random_trace(prefix1, d + 1);
+        r->fork_mark.k2 = gen_random_trace(prefix2, d + 1);
+      } else if ((rand() % (1 << n_p)) == 0) {
+        auto f = gen_random_frame();
+        std::deque<frame> prefix2(prefix);
+        prefix2.push_back(f);
+        r = mk_push_back(f);
+        r->push_back.k = gen_random_trace(prefix2, d);
       } else {
-        r = gen_random_push_pop_seq();
+        std::deque<frame> prefix2(prefix);
+        prefix2.pop_back();
+        r = mk_pop_back();
+        r->pop_back.k = gen_random_trace(prefix2, d);
       }
       return r;
     }
     
     std::shared_ptr<trace_type> gen_random_trace() {
-      return gen_random_trace(0);
+      std::deque<frame> prefix;
+      auto f = gen_random_frame();
+      prefix.push_back(f);
+      auto r = mk_push_back(f);
+      r->push_back.k = gen_random_trace(prefix, 0);
+      return r;
     }
     
     using thread_config_type = struct {
@@ -258,6 +265,10 @@ namespace cactus_stack {
       return m;
     }
     
+    thread_config_type gen_random_thread_config() {
+      return mk_thread_config(gen_random_trace());
+    }
+    
     void print_machine_config(machine_config_type& mc,
                               const std::string& prefix,
                               bool is_tail) {
@@ -289,6 +300,10 @@ namespace cactus_stack {
     
     void print_machine_config(machine_config_type& mc) {
       print_machine_config(mc, "", true);
+    }
+    
+    machine_config_type gen_random_machine_config() {
+      return mk_mc_thread(gen_random_thread_config());
     }
     
     template <class Coin_flip>
@@ -562,14 +577,6 @@ namespace cactus_stack {
         }
       }
       return r;
-    }
-    
-    thread_config_type gen_random_thread_config() {
-      return mk_thread_config(gen_random_trace());
-    }
-    
-    machine_config_type gen_random_machine_config() {
-      return mk_mc_thread(gen_random_thread_config());
     }
     
     void check() {
