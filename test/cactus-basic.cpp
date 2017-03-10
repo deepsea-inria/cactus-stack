@@ -12,6 +12,7 @@
 #include <deque>
 #include <cmath>
 #include <string>
+#include <time.h>
 
 #include "cactus-basic.hpp"
 
@@ -119,6 +120,98 @@ namespace cactus_stack {
       return std::make_shared<trace_type>(t);
     }
     
+    void print_trace(std::shared_ptr<trace_type> t, const std::string& prefix, bool is_tail) {
+      std::cout << (prefix + (is_tail ? "└── " : "├── "));
+      switch (t->tag) {
+        case Trace_fork_mark: {
+          std::cout << "*" << std::endl;
+          if (t->fork_mark.k1) {
+            print_trace(t->fork_mark.k1, prefix + (is_tail ? "    " : "│   "), false);
+          }
+          if (t->fork_mark.k2) {
+            print_trace(t->fork_mark.k2, prefix + (is_tail ? "    " : "│   "), true);
+          }
+          break;
+        }
+        case Trace_push_back: {
+          std::cout << "+[" << t->push_back.f.v << "]";
+          std::shared_ptr<trace_type> p = t->push_back.k;
+          while (p) {
+            if (p->tag == Trace_fork_mark) {
+              print_trace(p, "", true);
+              return;
+            } else if (p->tag == Trace_push_back) {
+              std::cout << " +[" << p->push_back.f.v << "]";
+              p = p->push_back.k;
+            } else if (p->tag == Trace_pop_back) {
+              std::cout << " -[]";
+              p = p->pop_back.k;
+            } else {
+              break;
+            }
+          }
+          std::cout << std::endl;
+          break;
+        }
+        case Trace_pop_back: {
+          assert(false); // impossible
+          break;
+        }
+        case Trace_nil: {
+          break;
+        }
+        default: {
+          assert(false);
+        }
+      }
+    }
+    
+    void print_trace(std::shared_ptr<trace_type> t) {
+      print_trace(t, "", true);
+    }
+    
+    std::shared_ptr<trace_type> gen_random_push_pop_seq(int nb_open_pushes) {
+      std::shared_ptr<trace_type> r;
+      if (nb_open_pushes == 0) {
+        return r;
+      }
+      if ((rand() % (1<<nb_open_pushes)) == 0) {
+        frame f;
+        f.v = rand() % 1024;
+        r = mk_push_back(f);
+        r->push_back.k = gen_random_push_pop_seq(nb_open_pushes + 1);
+      } else {
+        r = mk_pop_back();
+        r->pop_back.k = gen_random_push_pop_seq(nb_open_pushes - 1);
+      }
+      return r;
+    }
+    
+    std::shared_ptr<trace_type> gen_random_push_pop_seq() {
+      std::shared_ptr<trace_type> r;
+      frame f;
+      f.v = rand() % 1024;
+      r = mk_push_back(f);
+      r->push_back.k = gen_random_push_pop_seq(1);
+      return r;
+    }
+    
+    std::shared_ptr<trace_type> gen_random_trace(int d) {
+      std::shared_ptr<trace_type> r;
+      if ((rand() % (1<<d)) == 0) {
+        r = mk_fork_mark();
+        r->fork_mark.k1 = gen_random_trace(d + 1);
+        r->fork_mark.k2 = gen_random_trace(d + 1);
+      } else {
+        r = gen_random_push_pop_seq();
+      }
+      return r;
+    }
+    
+    std::shared_ptr<trace_type> gen_random_trace() {
+      return gen_random_trace(0);
+    }
+    
     using thread_config_type = struct {
       std::shared_ptr<trace_type> t;
       reference_stack_type rs; // reference stack
@@ -130,6 +223,10 @@ namespace cactus_stack {
       tc.t = t;
       tc.ms = create_stack();
       return tc;
+    }
+    
+    void print_thread_config(thread_config_type& tc) {
+      std::cout << "TC" << std::endl;
     }
     
     using machine_tag_type = enum {
@@ -159,6 +256,39 @@ namespace cactus_stack {
       m.tag = Machine_thread;
       m.thread = tc;
       return m;
+    }
+    
+    void print_machine_config(machine_config_type& mc,
+                              const std::string& prefix,
+                              bool is_tail) {
+      std::cout << (prefix + (is_tail ? "└── " : "├── "));
+      switch (mc.tag) {
+        case Machine_fork_mark: {
+          std::cout << "*" << std::endl;
+          if (mc.fork_mark.m1) {
+            print_machine_config(*mc.fork_mark.m1, prefix + (is_tail ? "    " : "│   "), false);
+          }
+          if (mc.fork_mark.m2) {
+            print_machine_config(*mc.fork_mark.m1, prefix + (is_tail ?"    " : "│   "), true);
+          }
+          break;
+        }
+        case Machine_thread: {
+          print_thread_config(mc.thread);
+          break;
+        }
+        case Machine_stuck: {
+          std::cout << "Stuck" << std::endl;
+          break;
+        }
+        default: {
+          assert(false);
+        }
+      }
+    }
+    
+    void print_machine_config(machine_config_type& mc) {
+      print_machine_config(mc, "", true);
     }
     
     template <class Coin_flip>
@@ -245,80 +375,7 @@ namespace cactus_stack {
       return n;
     }
     
-    void print_trace(trace_type& t, const std::string& prefix, bool is_tail) {
-      std::cout << (prefix + (is_tail ? "└── " : "├── "));
-      switch (t.tag) {
-        case Trace_fork_mark: {
-          std::cout << "*" << std::endl;
-          if (t.fork_mark.k1) {
-            print_trace(*t.fork_mark.k1, prefix + (is_tail ? "    " : "│   "), false);
-          }
-          if (t.fork_mark.k2) {
-            print_trace(*t.fork_mark.k2, prefix + (is_tail ?"    " : "│   "), true);
-          }
-          break;
-        }
-        case Trace_push_back: {
-          std::cout << "+" << std::endl;
-          break;
-        }
-        case Trace_pop_back: {
-          std::cout << "-" << std::endl;
-          break;
-        }
-        case Trace_nil: {
-          break;
-        }
-        default: {
-          assert(false);
-        }
-      }
-    }
-    
-    void print_trace(trace_type& t) {
-      print_trace(t, "", true);
-    }
-    
     /* Trace */
-    /*------------------------------*/
-    
-    /*------------------------------*/
-    /* Trace generator */
-    
-    std::shared_ptr<trace_type> gen_random_push_pop_seq(int nb_open_pushes, int len) {
-      std::shared_ptr<trace_type> r;
-      bool stop = (nb_open_pushes == 0) || (len == 0);
-      if ((rand() % (1<<nb_open_pushes)) == 0) {
-        frame f;
-        f.v = rand() % 1024;
-        r = mk_push_back(f);
-        if (! stop) {
-          r->push_back.k = gen_random_push_pop_seq(nb_open_pushes - 1, len - 1);
-        }
-      } else {
-        r = mk_pop_back();
-        if (! stop) {
-          r->pop_back.k = gen_random_push_pop_seq(nb_open_pushes, len - 1);
-        }
-      }
-      return r;
-    }
-    
-    std::shared_ptr<trace_type> gen_random_trace(int d) {
-      std::shared_ptr<trace_type> r;
-      if ((rand() % (1<<d)) == 0) {
-        r = mk_fork_mark();
-        r->fork_mark.k1 = gen_random_trace(d - 1);
-        r->fork_mark.k2 = gen_random_trace(d - 1);
-      } else {
-        static constexpr
-        int max_len_push_pop_seq = 20;
-        r = gen_random_push_pop_seq(0, max_len_push_pop_seq);
-      }
-      return r;
-    }
-    
-    /* Trace generator */
     /*------------------------------*/
     
     /*------------------------------*/
@@ -507,8 +564,16 @@ namespace cactus_stack {
       return r;
     }
     
+    thread_config_type gen_random_thread_config() {
+      return mk_thread_config(gen_random_trace());
+    }
+    
+    machine_config_type gen_random_machine_config() {
+      return mk_mc_thread(gen_random_thread_config());
+    }
+    
     void check() {
-      machine_config_type mc = mk_mc_thread(mk_thread_config(gen_random_trace(0)));
+      machine_config_type mc = gen_random_machine_config();
       while (! is_finished(mc)) {
         check_consistent(mc);
         mc = step([&] { return rand() % 2 == 0; }, mc);
@@ -519,6 +584,9 @@ namespace cactus_stack {
     /*------------------------------*/
     
     void ex1() {
+      srand(time(nullptr));
+      print_trace(gen_random_trace());
+      return;
       frame f;
       f.v = 123;
       auto t2 = mk_push_back(f);
@@ -529,7 +597,7 @@ namespace cactus_stack {
       auto t4 = mk_fork_mark();
       t4->fork_mark.k2 = t3;
       t4->fork_mark.k1 = t3;
-      print_trace(*t4);
+      print_trace(t4);
       return;
       machine_config_type mc = mk_mc_thread(mk_thread_config(t2));
       mc = step([&] { return rand() % 2 == 0; }, mc);
