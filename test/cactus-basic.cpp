@@ -189,13 +189,13 @@ namespace cactus_stack {
         return r;
       }
       int posn = position_of_top_async(prefix);
-      if ((posn > 0) && ((rand() % (1 << d)) == 0)) {
+      if ((posn > 0) && ((rand() % (1 << d)) < 3)) {
         r = mk_fork_mark();
         std::deque<frame> prefix1(prefix.begin(), prefix.begin() + posn);
         std::deque<frame> prefix2(prefix.begin() + posn, prefix.end());
         r->fork_mark.k1 = gen_random_trace(prefix1, d + 1);
         r->fork_mark.k2 = gen_random_trace(prefix2, d + 1);
-      } else if ((rand() % (1 << n_p)) == 0) {
+      } else if ((rand() % (2 + (1 << n_p))) < 3) {
         auto f = gen_random_frame();
         std::deque<frame> prefix2(prefix);
         prefix2.push_back(f);
@@ -215,7 +215,7 @@ namespace cactus_stack {
       auto f = gen_random_frame();
       prefix.push_back(f);
       auto r = mk_push_back(f);
-      r->push_back.k = gen_random_trace(prefix, 0);
+      r->push_back.k = gen_random_trace(prefix, 1);
       return r;
     }
     
