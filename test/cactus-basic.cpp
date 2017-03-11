@@ -155,32 +155,32 @@ namespace cactus_stack {
       return std::make_shared<trace_type>(t);
     }
     
-    void print_trace(std::shared_ptr<trace_type> t, const std::string& prefix, bool is_tail) {
-      std::cout << (prefix + (is_tail ? "└── " : "├── "));
+    void print_trace(std::ostream& out, std::shared_ptr<trace_type> t, const std::string& prefix, bool is_tail) {
+      out << (prefix + (is_tail ? "└── " : "├── "));
       switch (t->tag) {
         case Trace_fork_mark: {
-          std::cout << "*" << std::endl;
+          out << "*" << std::endl;
           if (t->fork_mark.k1) {
-            print_trace(t->fork_mark.k1, prefix + (is_tail ? "    " : "│   "), false);
+            print_trace(out, t->fork_mark.k1, prefix + (is_tail ? "    " : "│   "), false);
           }
           if (t->fork_mark.k2) {
-            print_trace(t->fork_mark.k2, prefix + (is_tail ? "    " : "│   "), true);
+            print_trace(out, t->fork_mark.k2, prefix + (is_tail ? "    " : "│   "), true);
           }
           break;
         }
         case Trace_push_back: {
           auto plt = t->push_back.f.plt;
           auto plt_s = (plt == Parent_link_async ? "A" : "S");
-          std::cout << "+[" << t->push_back.f.v << "](" << plt_s << ")" << std::endl;
+          out << "+[" << t->push_back.f.v << "](" << plt_s << ")" << std::endl;
           if (t->push_back.k) {
-            print_trace(t->push_back.k, prefix + (is_tail ? "    " : "│   "), true);
+            print_trace(out, t->push_back.k, prefix + (is_tail ? "    " : "│   "), true);
           }
           break;
         }
         case Trace_pop_back: {
-          std::cout << "-[]" << std::endl;
+          out << "-[]" << std::endl;
           if (t->pop_back.k) {
-            print_trace(t->pop_back.k, prefix + (is_tail ? "    " : "│   "), true);
+            print_trace(out, t->pop_back.k, prefix + (is_tail ? "    " : "│   "), true);
           }
           break;
         }
@@ -193,8 +193,8 @@ namespace cactus_stack {
       }
     }
     
-    void print_trace(std::shared_ptr<trace_type> t) {
-      print_trace(t, "", true);
+    void print_trace(std::ostream& out, std::shared_ptr<trace_type> t) {
+      print_trace(out, t, "", true);
     }
     
     int position_of_top_async(const std::deque<frame>& fs) {
@@ -264,7 +264,8 @@ namespace cactus_stack {
     }
     
     void print_thread_config(std::ostream& out, const thread_config_type& tc) {
-      out << "TC" << std::endl;
+      print_trace(out, tc.t);
+      
     }
     
     using machine_tag_type = enum {
@@ -332,7 +333,9 @@ namespace cactus_stack {
     }
     
     std::ostream& operator<<(std::ostream& out, const struct machine_config_struct& mc) {
-      return print_machine_config(out, mc, "", true);
+      out << std::endl; out << std::endl;
+      print_thread_config(out, mc.thread);
+      return out;
     }
     
     std::shared_ptr<machine_config_type> gen_random_machine_config() {
@@ -347,7 +350,7 @@ namespace cactus_stack {
           n.tag = Machine_fork_mark;
           if (flip_coin()) {
             n.fork_mark.m1 = step(m->fork_mark.m1);
-	    n.fork_mark.m2 = m->fork_mark.m2;
+            n.fork_mark.m2 = m->fork_mark.m2;
           } else {
             n.fork_mark.m1 = m->fork_mark.m1;
             n.fork_mark.m2 = step(m->fork_mark.m2);
@@ -614,8 +617,8 @@ namespace cactus_stack {
         auto mc = std::make_shared<machine_config_type>(_mc);
         while (! is_finished(mc)) {
           if (! is_consistent(mc)) {
-	    return false;
-	  }
+            return false;
+          }
           mc = step(mc);
         }
         return true;
@@ -628,7 +631,7 @@ namespace cactus_stack {
     
     void ex1() {
       srand(time(nullptr));
-      print_trace(gen_random_trace());
+      print_trace(std::cout, gen_random_trace());
       return;
       frame f;
       f.v = 123;
@@ -640,13 +643,13 @@ namespace cactus_stack {
       auto t4 = mk_fork_mark();
       t4->fork_mark.k2 = t3;
       t4->fork_mark.k1 = t3;
-
+      
       auto mc = mk_mc_thread(mk_thread_config(t2));
       auto mc2 = mk_mc_fork_mark(mc, mc);
-
+      
       std::cout << *mc2 << std::endl;
       return;
-
+      
     }
     
   } // end namespace
@@ -656,6 +659,6 @@ int main(int argc, const char * argv[]) {
   int nb_tests = (argc == 2) ? std::stoi(argv[1]) : 1024;
   using prop = cactus_stack::basic::property_consitent_machine_config;
   quickcheck::check<prop>("basic cactus stack", nb_tests);
-//  cactus_stack::basic::ex1();
+  //  cactus_stack::basic::ex1();
   return 0;
 }
