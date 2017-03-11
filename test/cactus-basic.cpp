@@ -63,6 +63,23 @@ namespace cactus_stack {
       return f;
     }
     
+    std::ostream& operator<<(std::ostream& out, const frame& f) {
+      auto ty_s = (f.plt == Parent_link_async) ? "A" : "S";
+      out << "{v=" << f.v << ", ty=" << ty_s << "}";
+      return out;
+    }
+    
+    template<class A>
+    std::ostream& operator<<(std::ostream& out, const std::deque<A>& xs) {
+      out << "[";
+      for (size_t i = 0; i < xs.size(); ++i)
+        if (i == xs.size() - 1)
+          out << xs[i];
+        else
+          out << xs[i] << ", ";
+      return out << "]";
+    }
+    
     /* Frame */
     /*------------------------------*/
     
@@ -263,11 +280,6 @@ namespace cactus_stack {
       return mk_thread_config(gen_random_trace());
     }
     
-    void print_thread_config(std::ostream& out, const thread_config_type& tc) {
-      print_trace(out, tc.t);
-      
-    }
-    
     using machine_tag_type = enum {
       Machine_fork_mark, Machine_thread, Machine_stuck
     };
@@ -301,10 +313,19 @@ namespace cactus_stack {
       new (&m) machine_config_type(*mk_mc_thread(gen_random_thread_config()));
     }
     
-    std::ostream& print_machine_config(std::ostream& out,
-                                       const machine_config_type& mc,
-                                       const std::string& prefix,
-                                       bool is_tail) {
+    reference_stack_type all_frames(frame_header_type* fp,
+                                    frame_header_type* sp);
+    
+    void print_stack_consistency_result(std::ostream& out, const thread_config_type& tc) {
+      auto ms = all_frames(tc.ms.fp, tc.ms.sp);
+      out << "TC{rs=" << tc.rs << ", ms=" << ms << "}" << std::endl;
+      out << std::endl;
+    }
+    
+    void print_machine_config(std::ostream& out,
+                              const machine_config_type& mc,
+                              const std::string& prefix,
+                              bool is_tail) {
       out << (prefix + (is_tail ? "└── " : "├── "));
       switch (mc.tag) {
         case Machine_fork_mark: {
@@ -318,7 +339,7 @@ namespace cactus_stack {
           break;
         }
         case Machine_thread: {
-          print_thread_config(out, mc.thread);
+          print_stack_consistency_result(out, mc.thread);
           break;
         }
         case Machine_stuck: {
@@ -329,12 +350,15 @@ namespace cactus_stack {
           assert(false);
         }
       }
-      return out;
+    }
+    
+    void print_machine_config(std::ostream& out, const machine_config_type& mc) {
+      print_machine_config(out, mc, "", true);
     }
     
     std::ostream& operator<<(std::ostream& out, const struct machine_config_struct& mc) {
       out << std::endl; out << std::endl;
-      print_thread_config(out, mc.thread);
+      print_trace(out, mc.thread.t);
       return out;
     }
     
@@ -617,6 +641,8 @@ namespace cactus_stack {
         auto mc = std::make_shared<machine_config_type>(_mc);
         while (! is_finished(mc)) {
           if (! is_consistent(mc)) {
+            std::cout << "Extraction of stacks of bogus thread configuration:" << std::endl;
+            print_machine_config(std::cout, *mc);
             return false;
           }
           mc = step(mc);
