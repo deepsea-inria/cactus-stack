@@ -347,9 +347,9 @@ namespace cactus_stack {
           n.tag = Machine_fork_mark;
           if (flip_coin()) {
             n.fork_mark.m1 = step(m->fork_mark.m1);
-            n.fork_mark.m2.swap(m->fork_mark.m2);
+	    n.fork_mark.m2 = m->fork_mark.m2;
           } else {
-            n.fork_mark.m1.swap(m->fork_mark.m1);
+            n.fork_mark.m1 = m->fork_mark.m1;
             n.fork_mark.m2 = step(m->fork_mark.m2);
           }
           break;
