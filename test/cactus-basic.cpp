@@ -574,13 +574,6 @@ namespace cactus_stack {
       return r;
     }
     
-    void check_consistent(machine_config_type& mc) {
-      if (! is_consistent(mc)) {
-        std::cout << "Error: inconsistent machine configuration ";
-        std::cout << "found." << std::endl;
-      }
-    }
-    
     bool is_tail(std::shared_ptr<trace_type>& p_t) {
       return p_t.get() == nullptr;
     }
@@ -624,7 +617,9 @@ namespace cactus_stack {
       bool holdsFor(const machine_config_type& _mc) {
         auto mc = std::make_shared<machine_config_type>(_mc);
         while (! is_finished(*mc)) {
-          check_consistent(*mc);
+          if (! is_consistent(*mc)) {
+	    return false;
+	  }
           mc = step(mc);
         }
         return true;
