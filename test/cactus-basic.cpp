@@ -16,8 +16,36 @@
 
 #include "cactus-basic.hpp"
 
+/*------------------------------*/
+/* Forward declarations */
+
 namespace cactus_stack {
   namespace basic {
+    
+    struct machine_config_struct;
+    
+    void generate(size_t, machine_config_struct&);
+    
+    std::ostream& operator<<(std::ostream&, const struct machine_config_struct&);
+    
+  } // end namespace
+} // end namespace
+
+/* Forward declarations */
+/*------------------------------*/
+
+/* this include directive is issued here so that
+ * the forward declarations defined above can be
+ * seend by the quickcheck library
+ */
+#include "quickcheck.hh"
+
+namespace cactus_stack {
+  namespace basic {
+    
+    bool flip_coin() {
+      return quickcheck::generateInRange(0, 1);
+    }
     
     /*------------------------------*/
     /* Frame */
@@ -30,8 +58,8 @@ namespace cactus_stack {
     
     frame gen_random_frame() {
       frame f;
-      f.v = rand() % 1024;
-      f.plt = ((rand() % 2 == 0) ? Parent_link_sync : Parent_link_async);
+      f.v = quickcheck::generateInRange(0, 1024);
+      f.plt = (flip_coin() ? Parent_link_sync : Parent_link_async);
       return f;
     }
     
@@ -188,13 +216,13 @@ namespace cactus_stack {
       }
       auto posn = position_of_top_async(prefix);
       bool can_fork = (posn > 0);
-      if (can_fork && ((rand() % d) == 0)) {
+      if (can_fork && (quickcheck::generateInRange(0, d - 1) == 0)) {
         r = mk_fork_mark();
         std::deque<frame> prefix1(prefix.begin(), prefix.begin() + posn);
         std::deque<frame> prefix2(prefix.begin() + posn, prefix.end());
         r->fork_mark.k1 = gen_random_trace(prefix1, d + 1);
         r->fork_mark.k2 = gen_random_trace(prefix2, d + 1);
-      } else if ((rand() % (2 + (1 << n_p))) < 3) {
+      } else if (quickcheck::generateInRange(0, (2 + (1 << n_p)) - 1) < 3) {
         auto f = gen_random_frame();
         std::deque<frame> prefix2(prefix);
         prefix2.push_back(f);
@@ -231,8 +259,12 @@ namespace cactus_stack {
       return tc;
     }
     
-    void print_thread_config(thread_config_type& tc) {
-      std::cout << "TC" << std::endl;
+    thread_config_type gen_random_thread_config() {
+      return mk_thread_config(gen_random_trace());
+    }
+    
+    void print_thread_config(std::ostream& out, const thread_config_type& tc) {
+      out << "TC" << std::endl;
     }
     
     using machine_tag_type = enum {
@@ -248,81 +280,82 @@ namespace cactus_stack {
       thread_config_type thread;
     };
     
-    machine_config_type mk_mc_fork_mark(std::shared_ptr<machine_config_type> m1,
-                                        std::shared_ptr<machine_config_type> m2) {
+    std::shared_ptr<machine_config_type> mk_mc_fork_mark(std::shared_ptr<machine_config_type> m1,
+                                                         std::shared_ptr<machine_config_type> m2) {
       machine_config_type m;
       m.tag = Machine_fork_mark;
       m.fork_mark.m1 = m1;
       m.fork_mark.m2 = m2;
-      return m;
+      return std::make_shared<machine_config_type>(m);
     }
     
-    machine_config_type mk_mc_thread(thread_config_type tc) {
+    std::shared_ptr<machine_config_type> mk_mc_thread(thread_config_type tc) {
       machine_config_type m;
       m.tag = Machine_thread;
       m.thread = tc;
-      return m;
+      return std::make_shared<machine_config_type>(m);
     }
     
-    thread_config_type gen_random_thread_config() {
-      return mk_thread_config(gen_random_trace());
+    void generate(size_t, machine_config_struct& m) {
+      new (&m) machine_config_type(*mk_mc_thread(gen_random_thread_config()));
     }
     
-    void print_machine_config(machine_config_type& mc,
-                              const std::string& prefix,
-                              bool is_tail) {
-      std::cout << (prefix + (is_tail ? "└── " : "├── "));
+    std::ostream& print_machine_config(std::ostream& out,
+                                       const machine_config_type& mc,
+                                       const std::string& prefix,
+                                       bool is_tail) {
+      out << (prefix + (is_tail ? "└── " : "├── "));
       switch (mc.tag) {
         case Machine_fork_mark: {
-          std::cout << "*" << std::endl;
+          out << "*" << std::endl;
           if (mc.fork_mark.m1) {
-            print_machine_config(*mc.fork_mark.m1, prefix + (is_tail ? "    " : "│   "), false);
+            print_machine_config(out, *mc.fork_mark.m1, prefix + (is_tail ? "    " : "│   "), false);
           }
           if (mc.fork_mark.m2) {
-            print_machine_config(*mc.fork_mark.m1, prefix + (is_tail ?"    " : "│   "), true);
+            print_machine_config(out, *mc.fork_mark.m1, prefix + (is_tail ?"    " : "│   "), true);
           }
           break;
         }
         case Machine_thread: {
-          print_thread_config(mc.thread);
+          print_thread_config(out, mc.thread);
           break;
         }
         case Machine_stuck: {
-          std::cout << "Stuck" << std::endl;
+          out << "Stuck" << std::endl;
           break;
         }
         default: {
           assert(false);
         }
       }
+      return out;
     }
     
-    void print_machine_config(machine_config_type& mc) {
-      print_machine_config(mc, "", true);
+    std::ostream& operator<<(std::ostream& out, const struct machine_config_struct& mc) {
+      return print_machine_config(out, mc, "", true);
     }
     
-    machine_config_type gen_random_machine_config() {
+    std::shared_ptr<machine_config_type> gen_random_machine_config() {
       return mk_mc_thread(gen_random_thread_config());
     }
     
-    template <class Coin_flip>
-    machine_config_type step(const Coin_flip& coin_flip, machine_config_type& m) {
+    std::shared_ptr<machine_config_type> step(std::shared_ptr<machine_config_type> m) {
       machine_config_type n;
       n.tag = Machine_stuck;
-      switch (m.tag) {
+      switch (m->tag) {
         case Machine_fork_mark: {
           n.tag = Machine_fork_mark;
-          if (coin_flip()) {
-            *n.fork_mark.m1 = step(coin_flip, *m.fork_mark.m1);
-            n.fork_mark.m2.swap(m.fork_mark.m2);
+          if (flip_coin()) {
+            n.fork_mark.m1 = step(m->fork_mark.m1);
+            n.fork_mark.m2.swap(m->fork_mark.m2);
           } else {
-            n.fork_mark.m1.swap(m.fork_mark.m1);
-            *n.fork_mark.m2 = step(coin_flip, *m.fork_mark.m2);
+            n.fork_mark.m1.swap(m->fork_mark.m1);
+            n.fork_mark.m2 = step(m->fork_mark.m2);
           }
           break;
         }
         case Machine_thread: {
-          thread_config_type& tc_m = m.thread;
+          thread_config_type& tc_m = m->thread;
           thread_config_type& tc_n = n.thread;
           switch (tc_m.t->tag) {
             case Trace_fork_mark: {
@@ -386,7 +419,7 @@ namespace cactus_stack {
           assert(false);
         }
       }
-      return n;
+      return std::make_shared<machine_config_type>(n);
     }
     
     /* Trace */
@@ -543,7 +576,7 @@ namespace cactus_stack {
     
     void check_consistent(machine_config_type& mc) {
       if (! is_consistent(mc)) {
-        std::cout << "Error: inconsistent machine configuration";
+        std::cout << "Error: inconsistent machine configuration ";
         std::cout << "found." << std::endl;
       }
     }
@@ -578,15 +611,28 @@ namespace cactus_stack {
       return r;
     }
     
-    void check() {
-      machine_config_type mc = gen_random_machine_config();
-      while (! is_finished(mc)) {
-        check_consistent(mc);
-        mc = step([&] { return rand() % 2 == 0; }, mc);
-      }
-    }
-    
     /* Predicates */
+    /*------------------------------*/
+    
+    /*------------------------------*/
+    /* Quickcheck properties */
+    
+    class property_consitent_machine_config
+    : public quickcheck::Property<machine_config_type> {
+    public:
+      
+      bool holdsFor(const machine_config_type& _mc) {
+        auto mc = std::make_shared<machine_config_type>(_mc);
+        while (! is_finished(*mc)) {
+          check_consistent(*mc);
+          mc = step(mc);
+        }
+        return true;
+      }
+      
+    };
+    
+    /* Quickcheck properties */
     /*------------------------------*/
     
     void ex1() {
@@ -603,20 +649,22 @@ namespace cactus_stack {
       auto t4 = mk_fork_mark();
       t4->fork_mark.k2 = t3;
       t4->fork_mark.k1 = t3;
-      print_trace(t4);
+
+      auto mc = mk_mc_thread(mk_thread_config(t2));
+      auto mc2 = mk_mc_fork_mark(mc, mc);
+
+      std::cout << *mc2 << std::endl;
       return;
-      machine_config_type mc = mk_mc_thread(mk_thread_config(t2));
-      mc = step([&] { return rand() % 2 == 0; }, mc);
-      check_consistent(mc);
-      mc = step([&] { return rand() % 2 == 0; }, mc);
-      check_consistent(mc);
+
     }
     
   } // end namespace
 } // end namespace
 
 int main(int argc, const char * argv[]) {
-  cactus_stack::basic::ex1();
-//  cactus_stack::basic::check();
+  int nb_tests = (argc == 2) ? std::stoi(argv[1]) : 1024;
+  using prop = cactus_stack::basic::property_consitent_machine_config;
+  quickcheck::check<prop>("basic cactus stack", nb_tests);
+//  cactus_stack::basic::ex1();
   return 0;
 }
