@@ -313,7 +313,7 @@ namespace cactus_stack {
             print_machine_config(out, *mc.fork_mark.m1, prefix + (is_tail ? "    " : "│   "), false);
           }
           if (mc.fork_mark.m2) {
-            print_machine_config(out, *mc.fork_mark.m1, prefix + (is_tail ?"    " : "│   "), true);
+            print_machine_config(out, *mc.fork_mark.m2, prefix + (is_tail ? "    " : "│   "), true);
           }
           break;
         }
