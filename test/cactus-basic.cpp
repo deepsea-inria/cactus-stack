@@ -551,16 +551,16 @@ namespace cactus_stack {
       return r;
     }
     
-    bool is_consistent(machine_config_type& mc) {
+    bool is_consistent(std::shared_ptr<machine_config_type> mc) {
       bool r = true;
-      switch (mc.tag) {
+      switch (mc->tag) {
         case Machine_fork_mark: {
-          r = r && is_consistent(*mc.fork_mark.m1);
-          r = r && is_consistent(*mc.fork_mark.m2);
+          r = r && is_consistent(mc->fork_mark.m1);
+          r = r && is_consistent(mc->fork_mark.m2);
           break;
         }
         case Machine_thread: {
-          r = is_consistent(mc.thread);
+          r = is_consistent(mc->thread);
           break;
         }
         case Machine_stuck: {
@@ -574,24 +574,20 @@ namespace cactus_stack {
       return r;
     }
     
-    bool is_tail(std::shared_ptr<trace_type>& p_t) {
-      return p_t.get() == nullptr;
-    }
-    
     bool is_tail(thread_config_type& tc) {
-      return is_tail(tc.t);
+      return tc.t.get() == nullptr;
     }
     
-    bool is_finished(machine_config_type& mc) {
+    bool is_finished(std::shared_ptr<machine_config_type> mc) {
       bool r = true;
-      switch (mc.tag) {
+      switch (mc->tag) {
         case Machine_fork_mark: {
-          r = r && is_finished(*mc.fork_mark.m1);
-          r = r && is_finished(*mc.fork_mark.m2);
+          r = r && is_finished(mc->fork_mark.m1);
+          r = r && is_finished(mc->fork_mark.m2);
           break;
         }
         case Machine_thread: {
-          r = is_tail(mc.thread);
+          r = is_tail(mc->thread);
           break;
         }
         case Machine_stuck: {
@@ -616,8 +612,8 @@ namespace cactus_stack {
       
       bool holdsFor(const machine_config_type& _mc) {
         auto mc = std::make_shared<machine_config_type>(_mc);
-        while (! is_finished(*mc)) {
-          if (! is_consistent(*mc)) {
+        while (! is_finished(mc)) {
+          if (! is_consistent(mc)) {
 	    return false;
 	  }
           mc = step(mc);
