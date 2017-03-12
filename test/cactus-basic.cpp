@@ -706,7 +706,8 @@ namespace cactus_stack {
 int main(int argc, const char * argv[]) {
   int nb_tests = (argc == 2) ? std::stoi(argv[1]) : 1024;
   using prop = cactus_stack::basic::property_consitent_machine_config;
-  quickcheck::check<prop>("basic cactus stack", nb_tests);
+  auto msg = "basic cactus stack is consistent with the spec";
+  quickcheck::check<prop>(msg, nb_tests);
   //  cactus_stack::basic::ex1();
   return 0;
 }
