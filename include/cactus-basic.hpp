@@ -211,13 +211,13 @@ namespace cactus_stack {
       destruct_fn(frame_data(s.fp));
       if (s.fp->ext.clt == Call_link_async) {
         frame_header_type* pred = s.fp->ext.pred;
-        if (pred != nullptr) {
-          s.fp->ext.pred = pred->ext.pred;
-        }
-        t.mtl = pred;
         if (pred == nullptr) {
           t.mhd = nullptr;
         }
+        if (pred != nullptr) {
+          pred->ext.succ = nullptr;
+        }
+        t.mtl = pred;
       }
       t.fp = s.fp->pred;
       chunk_type* c_fp = chunk_of(s.fp);

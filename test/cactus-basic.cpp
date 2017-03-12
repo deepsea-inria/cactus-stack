@@ -331,7 +331,7 @@ namespace cactus_stack {
       } else if (! equals(rmkd, ms_mf)) {
         out << "TC-F{rs=" << rmkd << ", ms=" << ms_mf << "}" << std::endl;
       } else if (! equals(rmkd, ms_mb)) {
-        out << "TC-F{rs=" << rmkd << ", ms=" << ms_mb << "}" << std::endl;
+        out << "TC-B{rs=" << rmkd << ", ms=" << ms_mb << "}" << std::endl;
       } else {
         out << "TC{}";
       }
