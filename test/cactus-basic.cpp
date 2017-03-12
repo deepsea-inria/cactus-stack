@@ -526,7 +526,7 @@ namespace cactus_stack {
     }
     
     bool equals(frame f1, frame f2) {
-      return (f1.v == f2.v);
+      return (f1.v == f2.v) && (f1.plt == f2.plt);
     }
     
     bool equals(reference_stack_type& fs1, reference_stack_type& fs2) {
