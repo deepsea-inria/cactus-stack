@@ -186,7 +186,6 @@ namespace cactus_stack {
           fhe.pred = s.mtl;
           fhe.succ = nullptr;
           if (s.mtl != nullptr) {
-            s.mtl->ext.clt = Call_link_async;
             s.mtl->ext.succ = t.fp;
           }
           t.mtl = t.fp;
