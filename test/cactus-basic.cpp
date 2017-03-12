@@ -313,12 +313,28 @@ namespace cactus_stack {
       new (&m) machine_config_type(*mk_mc_thread(gen_random_thread_config()));
     }
     
-    reference_stack_type all_frames(frame_header_type* fp,
-                                    frame_header_type* sp);
+    reference_stack_type all_frames(frame_header_type*, frame_header_type*);
+    reference_stack_type marked_frames_fwd(frame_header_type*);
+    reference_stack_type marked_frames_bkw(frame_header_type*);
+    
+    reference_stack_type marked_frames_of(const reference_stack_type&);
+    
+    bool equals(const reference_stack_type&, const reference_stack_type&);
     
     void print_stack_consistency_result(std::ostream& out, const thread_config_type& tc) {
       auto ms = all_frames(tc.ms.fp, tc.ms.sp);
-      out << "TC{rs=" << tc.rs << ", ms=" << ms << "}" << std::endl;
+      auto ms_mf = marked_frames_fwd(tc.ms.mhd);
+      auto ms_mb = marked_frames_bkw(tc.ms.mtl);
+      auto rmkd = marked_frames_of(tc.rs);
+      if (! equals(tc.rs, ms)) {
+        out << "TC-A{rs=" << tc.rs << ", ms=" << ms << "}" << std::endl;
+      } else if (! equals(rmkd, ms_mf)) {
+        out << "TC-F{rs=" << rmkd << ", ms=" << ms_mf << "}" << std::endl;
+      } else if (! equals(rmkd, ms_mb)) {
+        out << "TC-F{rs=" << rmkd << ", ms=" << ms_mb << "}" << std::endl;
+      } else {
+        out << "TC{}";
+      }
       out << std::endl;
     }
     
@@ -500,7 +516,7 @@ namespace cactus_stack {
       return r;
     }
     
-    reference_stack_type marked_frame_fwd(frame_header_type* mhd) {
+    reference_stack_type marked_frames_fwd(frame_header_type* mhd) {
       reference_stack_type r;
       for (auto p : marked_frame_ptrs_fwd(mhd)) {
         r.push_back(*(frame_data<frame>(p)));
@@ -517,7 +533,7 @@ namespace cactus_stack {
       return r;
     }
     
-    reference_stack_type marked_frame_bkw(frame_header_type* mtl) {
+    reference_stack_type marked_frames_bkw(frame_header_type* mtl) {
       reference_stack_type r;
       for (auto p : marked_frame_ptrs_bkw(mtl)) {
         r.push_back(*(frame_data<frame>(p)));
@@ -525,11 +541,12 @@ namespace cactus_stack {
       return r;
     }
     
-    bool equals(frame f1, frame f2) {
+    bool equals(const frame f1, const frame f2) {
       return (f1.v == f2.v) && (f1.plt == f2.plt);
     }
     
-    bool equals(reference_stack_type& fs1, reference_stack_type& fs2) {
+    bool equals(const reference_stack_type& fs1,
+                const reference_stack_type& fs2) {
       auto n = fs1.size();
       if (n != fs2.size()) {
         return false;
@@ -543,7 +560,7 @@ namespace cactus_stack {
     }
     
     template <class F, class T>
-    std::deque<T> filter(const F& f, std::deque<T>& d) {
+    std::deque<T> filter(const F& f, const std::deque<T>& d) {
       std::deque<T> r;
       for (auto v : d) {
         if (f(v)) {
@@ -553,7 +570,7 @@ namespace cactus_stack {
       return r;
     }
     
-    reference_stack_type marked_frames_of(reference_stack_type& d) {
+    reference_stack_type marked_frames_of(const reference_stack_type& d) {
       return filter([] (frame& f) {
         return is_marked(f);
       }, d);
@@ -571,9 +588,9 @@ namespace cactus_stack {
       auto af_m = all_frames(tc.ms.fp, tc.ms.sp);
       r = r && equals(af_r, af_m);
       auto mf_r = marked_frames_of(tc.rs);
-      auto mff_m = marked_frame_fwd(tc.ms.mhd);
+      auto mff_m = marked_frames_fwd(tc.ms.mhd);
       r = r && equals(mf_r, mff_m);
-      auto mfb_m = marked_frame_bkw(tc.ms.mtl);
+      auto mfb_m = marked_frames_bkw(tc.ms.mtl);
       r = r && equals(mf_r, mfb_m);
       return r;
     }
