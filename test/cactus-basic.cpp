@@ -527,7 +527,7 @@ namespace cactus_stack {
     std::deque<frame_header_type*> marked_frame_ptrs_bkw(frame_header_type* mtl) {
       std::deque<frame_header_type*> r;
       if (mtl != nullptr) {
-        r = marked_frame_ptrs_fwd(mtl->ext.pred);
+        r = marked_frame_ptrs_bkw(mtl->ext.pred);
         r.push_back(mtl);
       }
       return r;
@@ -658,8 +658,11 @@ namespace cactus_stack {
         auto mc = std::make_shared<machine_config_type>(_mc);
         while (! is_finished(mc)) {
           if (! is_consistent(mc)) {
-            std::cout << "Extraction of stacks of bogus thread configuration:" << std::endl;
+            std::cout << "Extraction of stacks from bogus thread configuration:" << std::endl;
             print_machine_config(std::cout, *mc);
+            //std::cout << std::endl; std::cout << std::endl;
+            //std::cout << "Next trace node" << std::endl;
+            //print_trace(std::cout, mc->thread.t);
             return false;
           }
           mc = step(mc);
