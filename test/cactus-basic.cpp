@@ -413,7 +413,7 @@ namespace cactus_stack {
                 rs1 = rp.s1;
                 rs1.push_back(rp.f1);
                 rs2 = rp.s2;
-                rs2.push_back(rp.f2);
+                rs2.push_front(rp.f2);
               } else {
                 rs1 = tc_m.rs;
               }
@@ -665,9 +665,6 @@ namespace cactus_stack {
           if (! is_consistent(mc)) {
             std::cout << "Extraction of stacks from bogus thread configuration:" << std::endl;
             print_machine_config(std::cout, *mc);
-            //std::cout << std::endl; std::cout << std::endl;
-            //std::cout << "Next trace node" << std::endl;
-            //print_trace(std::cout, mc->thread.t);
             return false;
           }
           mc = step(mc);
