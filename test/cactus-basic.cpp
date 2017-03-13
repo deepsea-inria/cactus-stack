@@ -400,6 +400,9 @@ namespace cactus_stack {
         case Machine_thread: {
           thread_config_type& tc_m = m->thread;
           thread_config_type& tc_n = n.thread;
+          if (tc_m.t.get() == nullptr) {
+            return m;
+          }
           switch (tc_m.t->tag) {
             case Trace_fork_mark: {
               n.tag = Machine_fork_mark;
@@ -456,6 +459,7 @@ namespace cactus_stack {
           break;
         }
         case Machine_stuck: {
+          assert(false);
           break;
         }
         default: {
@@ -635,6 +639,7 @@ namespace cactus_stack {
           break;
         }
         case Machine_stuck: {
+          assert(false);
           break;
         }
         default: {
