@@ -135,6 +135,12 @@ namespace cactus_stack {
     /*------------------------------*/
     /* Stack */
     
+    void check(const frame_header_type* p) {
+      while (p != nullptr) {
+        p = p->pred;
+      }
+    }
+    
     using stack_type = struct {
       frame_header_type* fp, * sp, * lp;
       frame_header_type* mhd, * mtl;
@@ -201,6 +207,7 @@ namespace cactus_stack {
       }
       t.fp->pred = s.fp;
       t.fp->ext = fhe;
+      check(t.fp);
       return t;
     }
     
@@ -229,6 +236,7 @@ namespace cactus_stack {
         t.lp = c_fp->hdr.lp;
         decr_refcount(c_fp);
       }
+      check(t.fp);
       return t;
     }
     
@@ -236,11 +244,13 @@ namespace cactus_stack {
       stack_type s1 = s;
       stack_type s2 = create_stack();
       if (s.mhd == nullptr) {
+        check(s1.fp); check(s2.fp);
         return std::make_pair(s1, s2);
       }
       frame_header_type* p_f1, * p_f2;
       if (s.mhd->pred == nullptr) {
         if (s.mhd->ext.succ == nullptr) {
+          check(s1.fp); check(s2.fp);
           return std::make_pair(s1, s2);
         } else {
           s.mhd->ext.pred = nullptr;
@@ -266,6 +276,7 @@ namespace cactus_stack {
       s2.mhd = p_f2;
       p_f2->pred = nullptr;
       p_f2->ext.pred = nullptr;
+      check(s1.fp); check(s2.fp);
       return std::make_pair(s1, s2);
     }
  

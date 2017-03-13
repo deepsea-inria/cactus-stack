@@ -703,7 +703,11 @@ namespace cactus_stack {
   } // end namespace
 } // end namespace
 
+int xxx;
+
 int main(int argc, const char * argv[]) {
+  xxx = time(nullptr);
+  srand(1489446194);
   int nb_tests = (argc == 2) ? std::stoi(argv[1]) : 1024;
   using prop = cactus_stack::basic::property_consitent_machine_config;
   auto msg = "basic cactus stack is consistent with the spec";
