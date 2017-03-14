@@ -10,6 +10,7 @@
 #include <iostream>
 #include <memory>
 #include <deque>
+#include <set>
 #include <cmath>
 #include <string>
 #include <time.h>
@@ -473,7 +474,7 @@ namespace cactus_stack {
     /*------------------------------*/
     
     /*------------------------------*/
-    /* Stack-frame enumeration */
+    /* Stack-frame extraction */
     
     using frame_addr_rng = std::pair<frame_header_type*, frame_header_type*>;
     
@@ -580,7 +581,89 @@ namespace cactus_stack {
       }, d);
     }
     
-    /* Stack-frame enumeration */
+    std::set<chunk_type*> chunks_of_stack(stack_type s) {
+      std::set<chunk_type*> r;
+      for (auto fp : all_frame_ptrs(s.fp, s.sp)) {
+        r.insert(chunk_of(fp));
+      }
+      return r;
+    }
+    
+    size_t refcount_of_stack(stack_type s, chunk_type* c) {
+      auto cs = chunks_of_stack(s);
+      bool found = (cs.find(c) != cs.end());
+      return found ? 1 : 0;
+    }
+    
+    std::deque<stack_type> stacks_of(std::shared_ptr<machine_config_type> mc) {
+      std::deque<stack_type> r;
+      if (mc.get() == nullptr) {
+        return r;
+      }
+      switch (mc->tag) {
+        case Machine_fork_mark: {
+          r = stacks_of(mc->fork_mark.m1);
+          for (auto s : stacks_of(mc->fork_mark.m2)) {
+            r.push_back(s);
+          }
+          break;
+        }
+        case Machine_thread: {
+          r.push_back(mc->thread.ms);
+          break;
+        }
+        case Machine_stuck: {
+          assert(false);
+          break;
+        }
+        default: {
+          assert(false);
+          break;
+        }
+      }
+      return r;
+    }
+    
+    size_t refcount_of_machine(std::shared_ptr<machine_config_type> mc, chunk_type* c) {
+      size_t r = 0;
+      for (auto s : stacks_of(mc)) {
+        r += refcount_of_stack(s, c);
+      }
+      return r;
+    }
+    
+    std::set<chunk_type*> live_chunks_of(std::shared_ptr<machine_config_type> mc) {
+      std::set<chunk_type*> r;
+      for (auto s : stacks_of(mc)) {
+        for (auto fp : all_frame_ptrs(s.fp, s.sp)) {
+          r.insert(chunk_of(fp));
+        }
+      }
+      return r;
+    }
+    
+    std::set<std::pair<void*, void*>> nursery_addrs(frame_header_type* fp,
+                                                    frame_header_type* sp,
+                                                    frame_header_type* lp) {
+      std::set<std::pair<void*, void*>> r;
+      if (fp == nullptr) {
+        auto p = r.insert(std::make_pair(sp, lp));
+        assert(p.second);
+        return r;
+      }
+      chunk_type* c_fp = chunk_of(fp);
+      chunk_type* c_pred = chunk_of(fp->pred);
+      if (c_fp == c_pred) {
+        r = nursery_addrs(fp->pred, fp, lp);
+      } else {
+        r = nursery_addrs(fp->pred, c_fp->hdr.sp, c_fp->hdr.lp);
+      }
+      auto p = r.insert(std::make_pair(sp, lp));
+      assert(p.second);
+      return r;
+    }
+    
+    /* Stack-frame extraction */
     /*------------------------------*/
     
     /*------------------------------*/
@@ -649,6 +732,76 @@ namespace cactus_stack {
       return r;
     }
     
+    bool is_memory_safe(std::shared_ptr<machine_config_type> mc) {
+      for (auto c : live_chunks_of(mc)) {
+        auto true_refcount = refcount_of_machine(mc, c);
+        auto actual_refcount = c->hdr.refcount.load();
+        if (true_refcount != actual_refcount) {
+          return false;
+        }
+      }
+      return true;
+    }
+    
+    bool well_formed_right_open_range(void* p1, void* p2) {
+      return p1 <= p2;
+    }
+    
+    bool overlapping_pointer_ranges(void* a1, void* a2, void* b1, void* b2) {
+      return (a1 < b2) && (b1 < a2);
+    }
+    
+    bool overlapping_pointer_ranges(std::pair<void*, void*> r1, std::pair<void*, void*> r2) {
+      return overlapping_pointer_ranges(r1.first, r1.second, r2.first, r2.second);
+    }
+    
+    std::set<std::pair<void*, void*>> frame_addrs_set(frame_header_type* fp, frame_header_type* sp) {
+      std::set<std::pair<void*, void*>> r;
+      for (auto p : frame_addrs(fp, sp)) {
+        auto q = r.insert(p);
+        assert(q.second);
+      }
+      return r;
+    }
+    
+    template <class T>
+    std::set<T> merge(const std::set<T>& s1, const std::set<T>& s2) {
+      std::set<T> r = s1;
+      for (auto x : s2) {
+        r.insert(x);
+      }
+      return r;
+    }
+    
+    bool is_pairwise_compatible(stack_type s1, stack_type s2) {
+      auto rs1 = merge(frame_addrs_set(s1.fp, s1.sp),
+                       nursery_addrs(s1.fp, s1.sp, s1.lp));
+      auto rs2 = merge(frame_addrs_set(s2.fp, s2.sp),
+                       nursery_addrs(s2.fp, s2.sp, s2.lp));
+      for (auto r1 : rs1) {
+        for (auto r2 : rs2) {
+          if (overlapping_pointer_ranges(r1, r2)) {
+            return false;
+          }
+        }
+      }
+      return true;
+    }
+    
+    bool is_pairwise_compatible(std::shared_ptr<machine_config_type> mc) {
+      auto ss = stacks_of(mc);
+      for (auto i = 0; i < ss.size(); i++) {
+        for (auto j = 0; j < ss.size(); j++) {
+          if (i != j) {
+            if (! is_pairwise_compatible(ss[i], ss[j])) {
+              return false;
+            }
+          }
+        }
+      }
+      return true;
+    }
+
     /* Predicates */
     /*------------------------------*/
     
@@ -674,8 +827,64 @@ namespace cactus_stack {
       
     };
     
+    class property_correct_refcounts
+    : public quickcheck::Property<machine_config_type> {
+    public:
+      
+      bool holdsFor(const machine_config_type& _mc) {
+        auto mc = std::make_shared<machine_config_type>(_mc);
+        while (! is_finished(mc)) {
+          if (! is_memory_safe(mc)) {
+            std::cout << "Extraction of stacks from bogus thread configuration:" << std::endl;
+            print_machine_config(std::cout, *mc);
+            return false;
+          }
+          mc = step(mc);
+        }
+        return true;
+      }
+      
+    };
+    
+    class property_pairwise_compatible
+    : public quickcheck::Property<machine_config_type> {
+    public:
+      
+      bool holdsFor(const machine_config_type& _mc) {
+        auto mc = std::make_shared<machine_config_type>(_mc);
+        while (! is_finished(mc)) {
+          if (! is_pairwise_compatible(mc)) {
+            std::cout << "Extraction of stacks from bogus thread configuration:" << std::endl;
+            print_machine_config(std::cout, *mc);
+            return false;
+          }
+          mc = step(mc);
+        }
+        return true;
+      }
+      
+    };
+    
     /* Quickcheck properties */
     /*------------------------------*/
+    
+    void check_consistency(int nb_tests) {
+      using prop = property_consitent_machine_config;
+      auto msg = "basic cactus stack is consistent with the spec";
+      quickcheck::check<prop>(msg, nb_tests);
+    }
+    
+    void check_refcounts(int nb_tests) {
+      using prop = property_correct_refcounts;
+      auto msg = "basic cactus stack has consistent refcounts";
+      quickcheck::check<prop>(msg, nb_tests);
+    }
+    
+    void check_pairwise_compatible(int nb_tests) {
+      using prop = property_pairwise_compatible;
+      auto msg = "basic cactus stack properly separates memory between threads";
+      quickcheck::check<prop>(msg, nb_tests);
+    }
     
     void ex1() {
       srand(time(nullptr));
@@ -709,9 +918,8 @@ int main(int argc, const char * argv[]) {
   xxx = time(nullptr);
   srand(1489446194);
   int nb_tests = (argc == 2) ? std::stoi(argv[1]) : 1024;
-  using prop = cactus_stack::basic::property_consitent_machine_config;
-  auto msg = "basic cactus stack is consistent with the spec";
-  quickcheck::check<prop>(msg, nb_tests);
+  cactus_stack::basic::check_refcounts(nb_tests);
+  cactus_stack::basic::check_consistency(nb_tests);
   //  cactus_stack::basic::ex1();
   return 0;
 }
