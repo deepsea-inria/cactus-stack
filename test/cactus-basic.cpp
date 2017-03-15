@@ -642,24 +642,28 @@ namespace cactus_stack {
       return r;
     }
     
-    std::set<std::pair<void*, void*>> nursery_addrs(frame_header_type* fp,
+    std::set<std::pair<void*, void*>> nursery_addr_ranges(frame_header_type* fp,
                                                     frame_header_type* sp,
                                                     frame_header_type* lp) {
       std::set<std::pair<void*, void*>> r;
+      auto ins = [&] {
+        if (sp != nullptr){
+          r.insert(std::make_pair(sp, lp));
+        }
+      };
       if (fp == nullptr) {
-        auto p = r.insert(std::make_pair(sp, lp));
-        assert(p.second);
+        ins();
         return r;
       }
       chunk_type* c_fp = chunk_of(fp);
-      chunk_type* c_pred = chunk_of(fp->pred);
+      auto pred = fp->pred;
+      chunk_type* c_pred = chunk_of(pred);
       if (c_fp == c_pred) {
-        r = nursery_addrs(fp->pred, fp, lp);
+        r = nursery_addr_ranges(pred, fp, lp);
       } else {
-        r = nursery_addrs(fp->pred, c_fp->hdr.sp, c_fp->hdr.lp);
+        r = nursery_addr_ranges(pred, c_fp->hdr.sp, c_fp->hdr.lp);
       }
-      auto p = r.insert(std::make_pair(sp, lp));
-      assert(p.second);
+      ins();
       return r;
     }
     
@@ -743,19 +747,15 @@ namespace cactus_stack {
       return true;
     }
     
-    bool well_formed_right_open_range(void* p1, void* p2) {
-      return p1 <= p2;
-    }
-    
     bool overlapping_pointer_ranges(void* a1, void* a2, void* b1, void* b2) {
       return (a1 < b2) && (b1 < a2);
     }
     
-    bool overlapping_pointer_ranges(std::pair<void*, void*> r1, std::pair<void*, void*> r2) {
+    bool overlapping_addr_ranges(std::pair<void*, void*> r1, std::pair<void*, void*> r2) {
       return overlapping_pointer_ranges(r1.first, r1.second, r2.first, r2.second);
     }
     
-    std::set<std::pair<void*, void*>> frame_addrs_set(frame_header_type* fp, frame_header_type* sp) {
+    std::set<std::pair<void*, void*>> frame_addr_ranges(frame_header_type* fp, frame_header_type* sp) {
       std::set<std::pair<void*, void*>> r;
       for (auto p : frame_addrs(fp, sp)) {
         auto q = r.insert(p);
@@ -774,13 +774,13 @@ namespace cactus_stack {
     }
     
     bool is_pairwise_compatible(stack_type s1, stack_type s2) {
-      auto rs1 = merge(frame_addrs_set(s1.fp, s1.sp),
-                       nursery_addrs(s1.fp, s1.sp, s1.lp));
-      auto rs2 = merge(frame_addrs_set(s2.fp, s2.sp),
-                       nursery_addrs(s2.fp, s2.sp, s2.lp));
+      auto rs1 = merge(frame_addr_ranges(s1.fp, s1.sp),
+                       nursery_addr_ranges(s1.fp, s1.sp, s1.lp));
+      auto rs2 = merge(frame_addr_ranges(s2.fp, s2.sp),
+                       nursery_addr_ranges(s2.fp, s2.sp, s2.lp));
       for (auto r1 : rs1) {
         for (auto r2 : rs2) {
-          if (overlapping_pointer_ranges(r1, r2)) {
+          if (overlapping_addr_ranges(r1, r2)) {
             return false;
           }
         }
@@ -896,8 +896,8 @@ int main(int argc, const char * argv[]) {
   //srand(1489584102);
   srand(xxx);
   int nb_tests = (argc == 2) ? std::stoi(argv[1]) : 1024;
-  cactus_stack::basic::check_refcounts(nb_tests);
-  cactus_stack::basic::check_consistency(nb_tests);
-  //cactus_stack::basic::check_pairwise_compatible(nb_tests);
+  cactus_stack::basic::check_pairwise_compatible(nb_tests);
+  //cactus_stack::basic::check_refcounts(nb_tests);
+  //cactus_stack::basic::check_consistency(nb_tests);
   return 0;
 }
