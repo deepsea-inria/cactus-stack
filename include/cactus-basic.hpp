@@ -259,6 +259,10 @@ namespace cactus_stack {
       p_f1 = p_f2->pred;
       s1.fp = p_f1;
       chunk_type* c_f1 = chunk_of(p_f1);
+      chunk_type* c_sp = chunk_of(s.sp);
+
+      chunk_type* c_f2 = chunk_of(p_f2);
+
       if (c_f1 == chunk_of(p_f2)) {
         incr_refcount(c_f1);
       }

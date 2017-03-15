@@ -53,6 +53,9 @@ namespace cactus_stack {
     
     class frame {
     public:
+      ~frame() {
+        v = -1;
+      }
       int v;
       parent_link_type plt;
     };
@@ -642,26 +645,25 @@ namespace cactus_stack {
       return r;
     }
     
-    std::set<std::pair<void*, void*>> nursery_addr_ranges(frame_header_type* fp,
-                                                    frame_header_type* sp,
-                                                    frame_header_type* lp) {
+    std::set<std::pair<void*, void*>> addr_ranges_of_alloc_reg(frame_header_type* fp,
+                                                               frame_header_type* sp,
+                                                               frame_header_type* lp) {
       std::set<std::pair<void*, void*>> r;
+      if (fp == nullptr) {
+        return r;
+      }
       auto ins = [&] {
-        if (sp != nullptr){
+        if ((sp != nullptr) && (sp != lp)) {
           r.insert(std::make_pair(sp, lp));
         }
       };
-      if (fp == nullptr) {
-        ins();
-        return r;
-      }
       chunk_type* c_fp = chunk_of(fp);
       auto pred = fp->pred;
       chunk_type* c_pred = chunk_of(pred);
       if (c_fp == c_pred) {
-        r = nursery_addr_ranges(pred, fp, lp);
+        r = addr_ranges_of_alloc_reg(pred, fp, lp);
       } else {
-        r = nursery_addr_ranges(pred, c_fp->hdr.sp, c_fp->hdr.lp);
+        r = addr_ranges_of_alloc_reg(pred, c_fp->hdr.sp, c_fp->hdr.lp);
       }
       ins();
       return r;
@@ -775,9 +777,9 @@ namespace cactus_stack {
     
     bool is_pairwise_compatible(stack_type s1, stack_type s2) {
       auto rs1 = merge(frame_addr_ranges(s1.fp, s1.sp),
-                       nursery_addr_ranges(s1.fp, s1.sp, s1.lp));
+                       addr_ranges_of_alloc_reg(s1.fp, s1.sp, s1.lp));
       auto rs2 = merge(frame_addr_ranges(s2.fp, s2.sp),
-                       nursery_addr_ranges(s2.fp, s2.sp, s2.lp));
+                       addr_ranges_of_alloc_reg(s2.fp, s2.sp, s2.lp));
       for (auto r1 : rs1) {
         for (auto r2 : rs2) {
           if (overlapping_addr_ranges(r1, r2)) {
@@ -801,7 +803,7 @@ namespace cactus_stack {
       }
       return true;
     }
-
+    
     /* Predicates */
     /*------------------------------*/
     
@@ -893,11 +895,11 @@ int xxx;
 
 int main(int argc, const char * argv[]) {
   xxx = time(nullptr);
-  //srand(1489584102);
+  //srand(1489590221);
   srand(xxx);
   int nb_tests = (argc == 2) ? std::stoi(argv[1]) : 1024;
   cactus_stack::basic::check_pairwise_compatible(nb_tests);
-  //cactus_stack::basic::check_refcounts(nb_tests);
-  //cactus_stack::basic::check_consistency(nb_tests);
+  cactus_stack::basic::check_refcounts(nb_tests);
+  cactus_stack::basic::check_consistency(nb_tests);
   return 0;
 }
