@@ -876,7 +876,7 @@ namespace cactus_stack {
     
     void check_refcounts(int nb_tests) {
       using prop = property_correct_refcounts;
-      auto msg = "basic cactus stack has consistent refcounts";
+      auto msg = "basic cactus stack has correct refcounts";
       quickcheck::check<prop>(msg, nb_tests);
     }
     
@@ -886,29 +886,6 @@ namespace cactus_stack {
       quickcheck::check<prop>(msg, nb_tests);
     }
     
-    void ex1() {
-      srand(time(nullptr));
-      print_trace(std::cout, gen_random_trace());
-      return;
-      frame f;
-      f.v = 123;
-      auto t2 = mk_push_back(f);
-      t2->push_back.k = mk_pop_back();
-      auto t3 = mk_fork_mark();
-      t3->fork_mark.k1 = t2;
-      t3->fork_mark.k2 = t2;
-      auto t4 = mk_fork_mark();
-      t4->fork_mark.k2 = t3;
-      t4->fork_mark.k1 = t3;
-      
-      auto mc = mk_mc_thread(mk_thread_config(t2));
-      auto mc2 = mk_mc_fork_mark(mc, mc);
-      
-      std::cout << *mc2 << std::endl;
-      return;
-      
-    }
-    
   } // end namespace
 } // end namespace
 
@@ -916,10 +893,11 @@ int xxx;
 
 int main(int argc, const char * argv[]) {
   xxx = time(nullptr);
-  srand(1489446194);
+  //srand(1489584102);
+  srand(xxx);
   int nb_tests = (argc == 2) ? std::stoi(argv[1]) : 1024;
   cactus_stack::basic::check_refcounts(nb_tests);
   cactus_stack::basic::check_consistency(nb_tests);
-  //  cactus_stack::basic::ex1();
+  //cactus_stack::basic::check_pairwise_compatible(nb_tests);
   return 0;
 }
