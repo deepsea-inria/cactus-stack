@@ -109,7 +109,8 @@ namespace cactus_stack {
     
     fork_result_type fork_mark(reference_stack_type& s) {
       fork_result_type r;
-      constexpr int not_found = -1;
+      static constexpr
+      int not_found = -1;
       size_t k = not_found;
       auto nb_frames = s.size();
       for (size_t i = 0; i < nb_frames; i++) {
@@ -122,15 +123,15 @@ namespace cactus_stack {
         r.tag = Fork_result_none;
         return r;
       }
-      reference_stack_type t1(s.begin(), s.begin() + k);
-      reference_stack_type t2(s.begin() + k, s.end());
+      reference_stack_type s1(s.begin(), s.begin() + k);
+      reference_stack_type s2(s.begin() + k, s.end());
       r.tag = Fork_result_some;
-      r.s1 = t1;
-      r.s2 = t2;
+      r.s1 = s1;
+      r.s2 = s2;
       r.s1.pop_back();
       r.s2.pop_front();
-      r.f1 = t1.back();
-      r.f2 = t2.front();
+      r.f1 = s1.back();
+      r.f2 = s2.front();
       return r;
     }
     
