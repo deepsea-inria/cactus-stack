@@ -14,10 +14,9 @@
 #include <cmath>
 #include <string>
 #include <time.h>
+#include "quickcheck.hh"
 
 #include "cactus-plus.hpp"
-
-#include "quickcheck.hh"
 
 namespace cactus_stack {
   namespace plus {

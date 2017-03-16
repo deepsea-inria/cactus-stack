@@ -14,32 +14,9 @@
 #include <cmath>
 #include <string>
 #include <time.h>
+#include "quickcheck.hh"
 
 #include "cactus-basic.hpp"
-
-/*------------------------------*/
-/* Forward declarations */
-
-namespace cactus_stack {
-  namespace basic {
-    
-    struct machine_config_struct;
-    
-    void generate(size_t, machine_config_struct&);
-    
-    std::ostream& operator<<(std::ostream&, const struct machine_config_struct&);
-    
-  } // end namespace
-} // end namespace
-
-/* Forward declarations */
-/*------------------------------*/
-
-/* this include directive is issued here so that
- * the forward declarations defined above can be
- * seend by the quickcheck library
- */
-#include "quickcheck.hh"
 
 namespace cactus_stack {
   namespace basic {
