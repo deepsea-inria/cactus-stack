@@ -218,8 +218,7 @@ namespace cactus_stack {
         frame_header_type* pred = s.fp->ext.pred;
         if (pred == nullptr) {
           t.mhd = nullptr;
-        }
-        if (pred != nullptr) {
+        } else {
           pred->ext.succ = nullptr;
         }
         t.mtl = pred;
