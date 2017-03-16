@@ -486,7 +486,7 @@ namespace cactus_stack {
       std::deque<frame_addr_rng> r;
       if (fp == nullptr) {
         // nothing to do
-      } else if (fp != nullptr && chunk_of(fp) == chunk_of(fp->pred)) {
+      } else if ((fp != nullptr) && (chunk_of(fp) == chunk_of(fp->pred))) {
         r = frame_addrs(fp->pred, fp);
         r.push_back(std::make_pair(fp, sp));
       } else {
