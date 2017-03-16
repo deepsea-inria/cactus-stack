@@ -219,23 +219,22 @@ namespace cactus_stack {
       print_trace(out, t, "", true);
     }
     
-    int position_of_top_async(const std::deque<frame>& fs) {
-      static constexpr
-      int not_found = -1;
-      for (int i = 0; i < fs.size(); i++) {
-        if (fs[i].plt == Parent_link_async) {
-          return i;
-        }
-      }
-      return not_found;
-    }
-    
     std::shared_ptr<trace_type> gen_random_trace(const std::deque<frame>& prefix, int d) {
       std::shared_ptr<trace_type> r;
       auto n_p = prefix.size();
       if (n_p == 0) {
         return r;
       }
+      auto position_of_top_async = [&] (const std::deque<frame>& fs) {
+        static constexpr
+        int not_found = -1;
+        for (int i = 0; i < fs.size(); i++) {
+          if (fs[i].plt == Parent_link_async) {
+            return i;
+          }
+        }
+        return not_found;
+      };
       auto posn = position_of_top_async(prefix);
       bool can_fork = (posn > 0);
       if (can_fork && (quickcheck::generateInRange(0, d - 1) == 0)) {
