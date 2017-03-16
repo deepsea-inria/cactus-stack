@@ -14,6 +14,10 @@
 #ifndef _CACTUS_STACK_PLUS_H_
 #define _CACTUS_STACK_PLUS_H_
 
+#ifndef CACTUS_STACK_BASIC_LG_K
+#define CACTUS_STACK_BASIC_LG_K 12
+#endif
+
 namespace cactus_stack {
   namespace plus {
     
@@ -31,7 +35,7 @@ namespace cactus_stack {
       /* Stack chunk */
       
       static constexpr
-      int lg_K = 12;
+      int lg_K = CACTUS_STACK_BASIC_LG_K;
       
       // size in bytes of a chunk
       static constexpr
@@ -145,10 +149,6 @@ namespace cactus_stack {
     /*------------------------------*/
     /* Stack */
     
-    using parent_link_type = enum {
-      Parent_link_async, Parent_link_sync
-    };
-    
     using stack_type = struct {
       frame_header_type* fp, * sp, * lp;
       frame_header_type* mhd, * mtl;
@@ -184,10 +184,16 @@ namespace cactus_stack {
       return std::make_pair(nullptr, nullptr);
     }
     
-    template <class Frame, class ...Args>
-    stack_type push_back(stack_type s, parent_link_type ty, Args... args) {
+    using parent_link_type = enum {
+      Parent_link_async, Parent_link_sync
+    };
+    
+    template <int frame_szb, class Initialize_fn, class Is_splittable_fn>
+    stack_type push_back(stack_type s, parent_link_type ty,
+                         const Initialize_fn& initialize_fn,
+                         const Is_splittable_fn& is_splittable_fn) {
       stack_type t = s;
-      auto b = sizeof(frame_header_type) + sizeof(Frame);
+      auto b = sizeof(frame_header_type) + frame_szb;
       t.fp = s.sp;
       t.sp = (frame_header_type*)((char*)t.fp + b);
       if (t.sp >= t.lp) {
@@ -196,7 +202,7 @@ namespace cactus_stack {
         t.sp = (frame_header_type*)((char*)t.fp + b);
         t.lp = (frame_header_type*)((char*)c + K);
       }
-      new (frame_data<Frame>(t.fp)) Frame(args...);
+      initialize_fn(frame_data(t.fp));
       frame_header_ext_type ext;
       ext.sft = Shared_frame_direct;
       if (ty == Parent_link_async) {
@@ -216,23 +222,25 @@ namespace cactus_stack {
         assert(false); // impossible
       }
       t.fp->pred = s.fp;
-      ext.llt = (! empty(s) && frame_data<Frame>(s.fp)->p.nb_iters() >= 2
+      ext.llt = (! empty(s) && is_splittable_fn(frame_data(s.fp))
                  ? Loop_link_child : Loop_link_none);
       t.fp->ext = ext;
       return t;
     }
     
-    template <class Frame>
-    stack_type pop_back(stack_type s) {
+    template <class Destruct_fn>
+    stack_type pop_back(stack_type s,
+                        const Destruct_fn& destruct_fn) {
       stack_type t = s;
-      frame_data<Frame>(s.fp)->~Frame();
+      destruct_fn(frame_data(s.fp));
       if (s.fp->ext.clt == Call_link_async) {
-        if (s.fp->ext.pred == nullptr) {
+        frame_header_type* pred = s.fp->ext.pred;
+        if (pred == nullptr) {
           t.mhd = nullptr;
         } else {
-          s.fp->ext.pred->ext.succ = nullptr;
+          pred->ext.succ = nullptr;
         }
-        t.mtl = s.fp->ext.pred;
+        t.mtl = pred;
       }
       t.fp = s.fp->pred;
       chunk_type* c_fp = chunk_of(s.fp);
@@ -267,10 +275,12 @@ namespace cactus_stack {
       }
       p_f1 = p_f2->pred;
       s1.fp = p_f1;
-      chunk_type* c_sp = chunk_of(s.sp);
-      if (c_sp == chunk_of(p_f1)) {
+      chunk_type* c_f1 = chunk_of(p_f1);
+      if (c_f1 == chunk_of(p_f2)) {
+        incr_refcount(c_f1);
+      }
+      if (chunk_of(s.sp) == c_f1) {
         s1.sp = p_f2;
-        incr_refcount(c_sp);
       } else {
         s1.sp = nullptr;
       }

@@ -10,11 +10,21 @@
 #include <iostream>
 #include <memory>
 #include <deque>
+#include <set>
+#include <cmath>
+#include <string>
+#include <time.h>
 
 #include "cactus-plus.hpp"
 
+#include "quickcheck.hh"
+
 namespace cactus_stack {
   namespace plus {
+    
+    bool flip_coin() {
+      return quickcheck::generateInRange(0, 1);
+    }
     
     /*------------------------------*/
     /* Frame */
@@ -43,11 +53,39 @@ namespace cactus_stack {
       shared_frame s;
     };
     
-    using machine_stack_type = stack_type;
-    using reference_stack_type = std::deque<frame>;
-
+    frame gen_random_frame() {
+      frame f;
+      f.p.v = quickcheck::generateInRange(0, 1024);
+      f.s.v = quickcheck::generateInRange(0, 1024);
+      f.s.plt = (flip_coin() ? Parent_link_sync : Parent_link_async);
+      return f;
+    }
+    
+    std::ostream& operator<<(std::ostream& out, const frame& f) {
+      auto ty_s = (f.s.plt == Parent_link_async) ? "A" : "S";
+      out << "{v=" << f.s.v << ", ty=" << ty_s << "}";
+      return out;
+    }
+    
+    template<class A>
+    std::ostream& operator<<(std::ostream& out, const std::deque<A>& xs) {
+      out << "[";
+      for (size_t i = 0; i < xs.size(); ++i)
+        if (i == xs.size() - 1)
+          out << xs[i];
+        else
+          out << xs[i] << ", ";
+      return out << "]";
+    }
+    
     /* Frame */
     /*------------------------------*/
+    
+    /*------------------------------*/
+    /* Trace */
+    
+    using machine_stack_type = stack_type;
+    using reference_stack_type = std::deque<frame>;
     
     bool is_splittable(private_frame& p) {
       return p.nb_iters() >= 2;
@@ -58,28 +96,25 @@ namespace cactus_stack {
     }
     
     using fork_result_tag = enum {
-      Fork_result0, Fork_result1, Fork_result_S, Fork_result_N
+      Fork_result_none, Fork_result_loop_split, Fork_result_fork
     };
     
     using fork_result_type = struct {
       fork_result_tag tag;
       struct {
-        reference_stack_type s;
-        frame f;
-      } fork_1;
-      struct {
         reference_stack_type s1, s2;
         frame f;
-      } fork_s;
+      } loop_split;
       struct {
         reference_stack_type s1, s2;
         frame f1, f2;
-      } fork_n;
+      } fork;
     };
     
     fork_result_type fork_mark(reference_stack_type& s) {
       fork_result_type r;
-      constexpr int not_found = -1;
+      static constexpr
+      int not_found = -1;
       size_t k = not_found;
       auto nb_frames = s.size();
       for (size_t i = 0; i < nb_frames; i++) {
@@ -88,44 +123,34 @@ namespace cactus_stack {
           break;
         }
       }
-      if (k == not_found) {
-        r.tag = Fork_result0;
-        return r;
-      }
       auto oldest_frame_is_k = [&] {
         return k == 0;
       };
-      reference_stack_type t1(s.begin(), s.begin() + k);
-      reference_stack_type t2(s.begin() + k, s.end());
-      if (oldest_frame_is_k() && ! is_splittable(s[k].p)) {
-        r.tag = Fork_result1;
-        r.fork_1.s = t2;
-        r.fork_1.s.pop_front();
-        r.fork_1.f = t2.front();
+      if ((k == not_found) || (oldest_frame_is_k() && ! is_splittable(s[k].p))) {
+        r.tag = Fork_result_none;
         return r;
       }
-      if (s[k].s.plt == Parent_link_async) {
+      reference_stack_type s1(s.begin(), s.begin() + k);
+      reference_stack_type s2(s.begin() + k, s.end());
+      if (! oldest_frame_is_k() && (s[k].s.plt == Parent_link_async)) {
         assert(! oldest_frame_is_k());
-        r.tag = Fork_result_N;
-        r.fork_n.s1 = t1;
-        r.fork_n.s2 = t2;
-        r.fork_n.s1.pop_back();
-        r.fork_n.s2.pop_front();
-        r.fork_n.f1 = t1.back();
-        r.fork_n.f2 = t2.front();
+        r.tag = Fork_result_fork;
+        r.fork.s1 = s1;
+        r.fork.s2 = s2;
+        r.fork.s1.pop_back();
+        r.fork.s2.pop_front();
+        r.fork.f1 = s1.back();
+        r.fork.f2 = s2.front();
         return r;
       }
       assert(is_splittable(s[k].p));
-      r.tag = Fork_result_S;
-      r.fork_s.s1 = t1;
-      r.fork_s.f = t2.front();
-      r.fork_s.s2 = t2;
-      r.fork_s.s2.pop_front();
+      r.tag = Fork_result_loop_split;
+      r.loop_split.s1 = s1;
+      r.loop_split.f = s2.front();
+      r.loop_split.s2 = s2;
+      r.loop_split.s2.pop_front();
       return r;
     }
-
-    /*------------------------------*/
-    /* Trace */
     
     using trace_tag_type = enum {
       Trace_push_back, Trace_pop_back,
@@ -137,43 +162,144 @@ namespace cactus_stack {
       trace_tag_type tag;
       struct {
         frame f;
-        std::unique_ptr<struct trace_struct> k;
+        std::shared_ptr<struct trace_struct> k;
       } push_back;
       struct {
-        std::unique_ptr<struct trace_struct> k;
+        std::shared_ptr<struct trace_struct> k;
       } pop_back;
       struct fork_mark_struct {
-        std::unique_ptr<struct trace_struct> k1;
-        std::unique_ptr<struct trace_struct> k2;
+        std::shared_ptr<struct trace_struct> k1;
+        std::shared_ptr<struct trace_struct> k2;
       } fork_mark;
     };
     
     using trace_type = struct trace_struct;
     
-    trace_type mk_push_back(frame f) {
+    std::shared_ptr<trace_type> mk_push_back(frame f) {
       trace_type t;
       t.tag = Trace_push_back;
       t.push_back.f = f;
-      return t;
+      return std::make_shared<trace_type>(t);
     }
     
-    trace_type mk_pop_back() {
+    std::shared_ptr<trace_type> mk_pop_back() {
       trace_type t;
       t.tag = Trace_pop_back;
-      return t;
+      return std::make_shared<trace_type>(t);
     }
     
-    trace_type mk_fork_mark() {
+    std::shared_ptr<trace_type> mk_fork_mark() {
       trace_type t;
       t.tag = Trace_fork_mark;
-      return t;
+      return std::make_shared<trace_type>(t);
+    }
+    
+    void print_trace(std::ostream& out, std::shared_ptr<trace_type> t, const std::string& prefix, bool is_tail) {
+      out << (prefix + (is_tail ? "└── " : "├── "));
+      switch (t->tag) {
+        case Trace_fork_mark: {
+          out << "*" << std::endl;
+          if (t->fork_mark.k1) {
+            print_trace(out, t->fork_mark.k1, prefix + (is_tail ? "    " : "│   "), false);
+          }
+          if (t->fork_mark.k2) {
+            print_trace(out, t->fork_mark.k2, prefix + (is_tail ? "    " : "│   "), true);
+          }
+          break;
+        }
+        case Trace_push_back: {
+          auto plt = t->push_back.f.s.plt;
+          auto plt_s = (plt == Parent_link_async ? "A" : "S");
+          out << "+[" << t->push_back.f.s.v << "](" << plt_s << ")" << std::endl;
+          if (t->push_back.k) {
+            print_trace(out, t->push_back.k, prefix + (is_tail ? "    " : "│   "), true);
+          }
+          break;
+        }
+        case Trace_pop_back: {
+          out << "-[]" << std::endl;
+          if (t->pop_back.k) {
+            print_trace(out, t->pop_back.k, prefix + (is_tail ? "    " : "│   "), true);
+          }
+          break;
+        }
+        case Trace_nil: {
+          break;
+        }
+        default: {
+          assert(false);
+        }
+      }
+    }
+    
+    void print_trace(std::ostream& out, std::shared_ptr<trace_type> t) {
+      print_trace(out, t, "", true);
+    }
+    
+    std::shared_ptr<trace_type> gen_random_trace(const std::deque<frame>& prefix, int d) {
+      std::shared_ptr<trace_type> r;
+      auto n_p = prefix.size();
+      if (n_p == 0) {
+        return r;
+      }
+      auto position_of_top_async = [&] (const std::deque<frame>& fs) {
+        static constexpr
+        int not_found = -1;
+        for (int i = 0; i < fs.size(); i++) {
+          if (fs[i].s.plt == Parent_link_async) {
+            return i;
+          }
+        }
+        return not_found;
+      };
+      auto posn = position_of_top_async(prefix);
+      bool can_fork = (posn > 0);
+      if (can_fork && (quickcheck::generateInRange(0, d - 1) == 0)) {
+        r = mk_fork_mark();
+        std::deque<frame> prefix1(prefix.begin(), prefix.begin() + posn);
+        std::deque<frame> prefix2(prefix.begin() + posn, prefix.end());
+        r->fork_mark.k1 = gen_random_trace(prefix1, d + 1);
+        r->fork_mark.k2 = gen_random_trace(prefix2, d + 1);
+      } else if (quickcheck::generateInRange(0, (2 + (1 << n_p)) - 1) < 3) {
+        auto f = gen_random_frame();
+        std::deque<frame> prefix2(prefix);
+        prefix2.push_back(f);
+        r = mk_push_back(f);
+        r->push_back.k = gen_random_trace(prefix2, d);
+      } else {
+        std::deque<frame> prefix2(prefix);
+        prefix2.pop_back();
+        r = mk_pop_back();
+        r->pop_back.k = gen_random_trace(prefix2, d);
+      }
+      return r;
+    }
+    
+    std::shared_ptr<trace_type> gen_random_trace() {
+      std::deque<frame> prefix;
+      auto f = gen_random_frame();
+      prefix.push_back(f);
+      auto r = mk_push_back(f);
+      r->push_back.k = gen_random_trace(prefix, 2);
+      return r;
     }
     
     using thread_config_type = struct {
-      trace_type t;
+      std::shared_ptr<trace_type> t;
       reference_stack_type rs; // reference stack
       machine_stack_type ms;
     };
+    
+    thread_config_type mk_thread_config(std::shared_ptr<trace_type> t) {
+      thread_config_type tc;
+      tc.t = t;
+      tc.ms = create_stack();
+      return tc;
+    }
+    
+    thread_config_type gen_random_thread_config() {
+      return mk_thread_config(gen_random_trace());
+    }
     
     using machine_tag_type = enum {
       Machine_fork_mark, Machine_thread, Machine_stuck
@@ -182,42 +308,133 @@ namespace cactus_stack {
     using machine_config_type = struct machine_config_struct {
       machine_tag_type tag;
       struct {
-        std::unique_ptr<struct machine_config_struct> m1;
-        std::unique_ptr<struct machine_config_struct> m2;
+        std::shared_ptr<struct machine_config_struct> m1;
+        std::shared_ptr<struct machine_config_struct> m2;
       } fork_mark;
       thread_config_type thread;
     };
     
-    template <class Coin_flip>
-    machine_config_type step(const Coin_flip& coin_flip, machine_config_type& m) {
-      machine_config_type n;
-      n.tag = Machine_stuck;
-      switch (m.tag) {
+    std::shared_ptr<machine_config_type> mk_mc_fork_mark(std::shared_ptr<machine_config_type> m1,
+                                                         std::shared_ptr<machine_config_type> m2) {
+      machine_config_type m;
+      m.tag = Machine_fork_mark;
+      m.fork_mark.m1 = m1;
+      m.fork_mark.m2 = m2;
+      return std::make_shared<machine_config_type>(m);
+    }
+    
+    std::shared_ptr<machine_config_type> mk_mc_thread(thread_config_type tc) {
+      machine_config_type m;
+      m.tag = Machine_thread;
+      m.thread = tc;
+      return std::make_shared<machine_config_type>(m);
+    }
+    
+    void generate(size_t, machine_config_struct& m) {
+      new (&m) machine_config_type(*mk_mc_thread(gen_random_thread_config()));
+    }
+    
+    reference_stack_type all_frames(frame_header_type*, frame_header_type*);
+    reference_stack_type marked_frames_fwd(frame_header_type*);
+    reference_stack_type marked_frames_bkw(frame_header_type*);
+    
+    reference_stack_type marked_frames_of(const reference_stack_type&);
+    
+    bool equals(const reference_stack_type&, const reference_stack_type&);
+    
+    void print_stack_consistency_result(std::ostream& out, const thread_config_type& tc) {
+      auto ms = all_frames(tc.ms.fp, tc.ms.sp);
+      auto ms_mf = marked_frames_fwd(tc.ms.mhd);
+      auto ms_mb = marked_frames_bkw(tc.ms.mtl);
+      auto rmkd = marked_frames_of(tc.rs);
+      if (! equals(tc.rs, ms)) {
+        out << "TC-A{rs=" << tc.rs << ", ms=" << ms << "}" << std::endl;
+      } else if (! equals(rmkd, ms_mf)) {
+        out << "TC-F{rs=" << rmkd << ", ms=" << ms_mf << "}" << std::endl;
+      } else if (! equals(rmkd, ms_mb)) {
+        out << "TC-B{rs=" << rmkd << ", ms=" << ms_mb << "}" << std::endl;
+      } else {
+        out << "TC{}";
+      }
+      out << std::endl;
+    }
+    
+    void print_machine_config(std::ostream& out,
+                              const machine_config_type& mc,
+                              const std::string& prefix,
+                              bool is_tail) {
+      out << (prefix + (is_tail ? "└── " : "├── "));
+      switch (mc.tag) {
         case Machine_fork_mark: {
-          n.tag = Machine_fork_mark;
-          if (coin_flip()) {
-            *n.fork_mark.m1 = step(coin_flip, *m.fork_mark.m1);
-            n.fork_mark.m2.swap(m.fork_mark.m2);
-          } else {
-            n.fork_mark.m1.swap(m.fork_mark.m1);
-            *n.fork_mark.m2 = step(coin_flip, *m.fork_mark.m2);
+          out << "*" << std::endl;
+          if (mc.fork_mark.m1) {
+            print_machine_config(out, *mc.fork_mark.m1, prefix + (is_tail ? "    " : "│   "), false);
+          }
+          if (mc.fork_mark.m2) {
+            print_machine_config(out, *mc.fork_mark.m2, prefix + (is_tail ? "    " : "│   "), true);
           }
           break;
         }
         case Machine_thread: {
-          thread_config_type& tc_m = m.thread;
+          print_stack_consistency_result(out, mc.thread);
+          break;
+        }
+        case Machine_stuck: {
+          out << "Stuck" << std::endl;
+          break;
+        }
+        default: {
+          assert(false);
+        }
+      }
+    }
+    
+    void print_machine_config(std::ostream& out, const machine_config_type& mc) {
+      print_machine_config(out, mc, "", true);
+    }
+    
+    std::ostream& operator<<(std::ostream& out, const struct machine_config_struct& mc) {
+      out << std::endl; out << std::endl;
+      print_trace(out, mc.thread.t);
+      return out;
+    }
+    
+    std::shared_ptr<machine_config_type> gen_random_machine_config() {
+      return mk_mc_thread(gen_random_thread_config());
+    }
+    
+    std::shared_ptr<machine_config_type> step(std::shared_ptr<machine_config_type> m) {
+      machine_config_type n;
+      n.tag = Machine_stuck;
+      switch (m->tag) {
+        case Machine_fork_mark: {
+          n.tag = Machine_fork_mark;
+          if (flip_coin()) {
+            n.fork_mark.m1 = step(m->fork_mark.m1);
+            n.fork_mark.m2 = m->fork_mark.m2;
+          } else {
+            n.fork_mark.m1 = m->fork_mark.m1;
+            n.fork_mark.m2 = step(m->fork_mark.m2);
+          }
+          break;
+        }
+        case Machine_thread: {
+          thread_config_type& tc_m = m->thread;
           thread_config_type& tc_n = n.thread;
-          switch (tc_m.t.tag) {
+          if (tc_m.t.get() == nullptr) {
+            return m;
+          }
+          switch (tc_m.t->tag) {
             case Trace_fork_mark: {
               n.tag = Machine_fork_mark;
               auto mp = fork_mark(tc_m.ms);
               auto rp = fork_mark(tc_m.rs);
               reference_stack_type rs1, rs2;
-              if (rp.tag == Fork_result_N) {
-                rs1 = rp.fork_n.s1;
-                rs1.push_back(rp.fork_n.f1);
-                rs2 = rp.fork_n.s2;
-                rs2.push_back(rp.fork_n.f2);
+              if (rp.tag == Fork_result_fork) {
+                rs1 = rp.fork.s1;
+                rs1.push_back(rp.fork.f1);
+                rs2 = rp.fork.s2;
+                rs2.push_front(rp.fork.f2);
               } else {
                 rs1 = tc_m.rs;
               }
@@ -226,51 +443,61 @@ namespace cactus_stack {
               machine_config_type& m1 = *n.fork_mark.m1;
               machine_config_type& m2 = *n.fork_mark.m2;
               m1.tag = Machine_thread;
-              m1.thread.t = std::move(*tc_m.t.fork_mark.k1);
+              m1.thread.t = tc_m.t->fork_mark.k1;
               m1.thread.ms = mp.first;
               m1.thread.rs = rs1;
               m2.tag = Machine_thread;
-              m2.thread.t = std::move(*tc_m.t.fork_mark.k2);
+              m2.thread.t = tc_m.t->fork_mark.k2;
               m2.thread.ms = mp.second;
               m2.thread.rs = rs2;
               break;
             }
             case Trace_push_back: {
-              frame f = tc_m.t.push_back.f;
+              frame f = tc_m.t->push_back.f;
               n.tag = Machine_thread;
               tc_n.rs = tc_m.rs;
               tc_n.rs.push_back(f);
-              tc_n.ms = push_back<frame>(tc_m.ms, f.s.plt, f);
+              tc_n.ms = push_back<sizeof(frame)>(tc_m.ms, f.s.plt, [&] (char* p) {
+                new ((frame*)p) frame(f);
+              }, [&] (char* _p) {
+                frame* f = (frame*)_p;
+                return f->p.nb_iters() >= 2;
+              });
+              tc_n.t = tc_m.t->push_back.k;
               break;
             }
             case Trace_pop_back: {
               n.tag = Machine_thread;
               tc_n.rs = tc_m.rs;
               tc_n.rs.pop_back();
-              tc_n.ms = pop_back<frame>(tc_m.ms);
+              tc_n.ms = pop_back(tc_m.ms, [&] (char* p) {
+                ((frame*)(p))->~frame();
+              });
+              tc_n.t = tc_m.t->pop_back.k;
               break;
             }
             default: {
-              assert(false); // todo
+              assert(false);
             }
           }
           break;
         }
         case Machine_stuck: {
+          assert(false);
           break;
         }
         default: {
-          break;
+          assert(false);
         }
       }
-      return n;
+      return std::make_shared<machine_config_type>(n);
     }
     
     /* Trace */
     /*------------------------------*/
     
     /*------------------------------*/
-    /* Checks for invariants */
+    /* Stack-frame extraction */
     
     using frame_addr_rng = std::pair<frame_header_type*, frame_header_type*>;
     
@@ -279,7 +506,7 @@ namespace cactus_stack {
       std::deque<frame_addr_rng> r;
       if (fp == nullptr) {
         // nothing to do
-      } else if (fp != nullptr && chunk_of(fp) == chunk_of(fp->pred)) {
+      } else if ((fp != nullptr) && (chunk_of(fp) == chunk_of(fp->pred))) {
         r = frame_addrs(fp->pred, fp);
         r.push_back(std::make_pair(fp, sp));
       } else {
@@ -298,7 +525,8 @@ namespace cactus_stack {
       return r;
     }
     
-    reference_stack_type all_frames(frame_header_type* fp, frame_header_type* sp) {
+    reference_stack_type all_frames(frame_header_type* fp,
+                                    frame_header_type* sp) {
       reference_stack_type r;
       for (auto p : all_frame_ptrs(fp, sp)) {
         frame f = *(frame_data<frame>(p));
@@ -319,7 +547,7 @@ namespace cactus_stack {
       return r;
     }
     
-    reference_stack_type marked_frame_fwd(frame_header_type* mhd) {
+    reference_stack_type marked_frames_fwd(frame_header_type* mhd) {
       reference_stack_type r;
       for (auto p : marked_frame_ptrs_fwd(mhd)) {
         r.push_back(*(frame_data<frame>(p)));
@@ -330,7 +558,7 @@ namespace cactus_stack {
     std::deque<frame_header_type*> marked_frame_ptrs_bkw(frame_header_type* mtl) {
       std::deque<frame_header_type*> r;
       if (mtl != nullptr) {
-        r = marked_frame_ptrs_fwd(mtl->ext.pred);
+        r = marked_frame_ptrs_bkw(mtl->ext.pred);
         if (is_splittable(frame_data<frame>(mtl)->p) ||
             (mtl->ext.clt == Call_link_async)) {
           r.push_back(mtl);
@@ -339,7 +567,7 @@ namespace cactus_stack {
       return r;
     }
     
-    reference_stack_type marked_frame_bkw(frame_header_type* mtl) {
+    reference_stack_type marked_frames_bkw(frame_header_type* mtl) {
       reference_stack_type r;
       for (auto p : marked_frame_ptrs_bkw(mtl)) {
         r.push_back(*(frame_data<frame>(p)));
@@ -351,7 +579,8 @@ namespace cactus_stack {
       return (f1.p.v == f2.p.v) && (f1.s.v == f2.s.v);
     }
     
-    bool equals(reference_stack_type& fs1, reference_stack_type& fs2) {
+    bool equals(const reference_stack_type& fs1,
+                const reference_stack_type& fs2) {
       auto n = fs1.size();
       if (n != fs2.size()) {
         return false;
@@ -365,7 +594,7 @@ namespace cactus_stack {
     }
     
     template <class F, class T>
-    std::deque<T> filter(const F& f, std::deque<T>& d) {
+    std::deque<T> filter(const F& f, const std::deque<T>& d) {
       std::deque<T> r;
       for (auto v : d) {
         if (f(v)) {
@@ -375,11 +604,102 @@ namespace cactus_stack {
       return r;
     }
     
-    reference_stack_type marked_frames_of(reference_stack_type& d) {
+    reference_stack_type marked_frames_of(const reference_stack_type& d) {
       return filter([] (frame& f) {
         return is_marked(f);
       }, d);
     }
+    
+    std::set<chunk_type*> chunks_of_stack(stack_type s) {
+      std::set<chunk_type*> r;
+      for (auto fp : all_frame_ptrs(s.fp, s.sp)) {
+        r.insert(chunk_of(fp));
+      }
+      return r;
+    }
+    
+    size_t refcount_of_stack(stack_type s, chunk_type* c) {
+      auto cs = chunks_of_stack(s);
+      bool found = (cs.find(c) != cs.end());
+      return found ? 1 : 0;
+    }
+    
+    std::deque<stack_type> stacks_of(std::shared_ptr<machine_config_type> mc) {
+      std::deque<stack_type> r;
+      if (mc.get() == nullptr) {
+        return r;
+      }
+      switch (mc->tag) {
+        case Machine_fork_mark: {
+          r = stacks_of(mc->fork_mark.m1);
+          for (auto s : stacks_of(mc->fork_mark.m2)) {
+            r.push_back(s);
+          }
+          break;
+        }
+        case Machine_thread: {
+          r.push_back(mc->thread.ms);
+          break;
+        }
+        case Machine_stuck: {
+          assert(false);
+          break;
+        }
+        default: {
+          assert(false);
+          break;
+        }
+      }
+      return r;
+    }
+    
+    size_t refcount_of_machine(std::shared_ptr<machine_config_type> mc, chunk_type* c) {
+      size_t r = 0;
+      for (auto s : stacks_of(mc)) {
+        r += refcount_of_stack(s, c);
+      }
+      return r;
+    }
+    
+    std::set<chunk_type*> live_chunks_of(std::shared_ptr<machine_config_type> mc) {
+      std::set<chunk_type*> r;
+      for (auto s : stacks_of(mc)) {
+        for (auto fp : all_frame_ptrs(s.fp, s.sp)) {
+          r.insert(chunk_of(fp));
+        }
+      }
+      return r;
+    }
+    
+    std::set<std::pair<void*, void*>> addr_ranges_of_alloc_reg(frame_header_type* fp,
+                                                               frame_header_type* sp,
+                                                               frame_header_type* lp) {
+      std::set<std::pair<void*, void*>> r;
+      if (fp == nullptr) {
+        return r;
+      }
+      auto ins = [&] {
+        if ((sp != nullptr) && (sp != lp)) {
+          r.insert(std::make_pair(sp, lp));
+        }
+      };
+      chunk_type* c_fp = chunk_of(fp);
+      auto pred = fp->pred;
+      chunk_type* c_pred = chunk_of(pred);
+      if (c_fp == c_pred) {
+        r = addr_ranges_of_alloc_reg(pred, fp, lp);
+      } else {
+        r = addr_ranges_of_alloc_reg(pred, c_fp->hdr.sp, c_fp->hdr.lp);
+      }
+      ins();
+      return r;
+    }
+    
+    /* Stack-frame extraction */
+    /*------------------------------*/
+    
+    /*------------------------------*/
+    /* Predicates */
     
     bool is_consistent(thread_config_type& tc) {
       bool r = true;
@@ -387,23 +707,23 @@ namespace cactus_stack {
       auto af_m = all_frames(tc.ms.fp, tc.ms.sp);
       r = r && equals(af_r, af_m);
       auto mf_r = marked_frames_of(tc.rs);
-      auto mff_m = marked_frame_fwd(tc.ms.mhd);
+      auto mff_m = marked_frames_fwd(tc.ms.mhd);
       r = r && equals(mf_r, mff_m);
-      auto mfb_m = marked_frame_bkw(tc.ms.mtl);
+      auto mfb_m = marked_frames_bkw(tc.ms.mtl);
       r = r && equals(mf_r, mfb_m);
       return r;
     }
     
-    bool is_consistent(machine_config_type& mc) {
+    bool is_consistent(std::shared_ptr<machine_config_type> mc) {
       bool r = true;
-      switch (mc.tag) {
+      switch (mc->tag) {
         case Machine_fork_mark: {
-          r = r && is_consistent(*mc.fork_mark.m1);
-          r = r && is_consistent(*mc.fork_mark.m2);
+          r = r && is_consistent(mc->fork_mark.m1);
+          r = r && is_consistent(mc->fork_mark.m2);
           break;
         }
         case Machine_thread: {
-          r = is_consistent(mc.thread);
+          r = is_consistent(mc->thread);
           break;
         }
         case Machine_stuck: {
@@ -417,14 +737,195 @@ namespace cactus_stack {
       return r;
     }
     
-    /* Checks for invariants */
+    bool is_tail(thread_config_type& tc) {
+      return tc.t.get() == nullptr;
+    }
+    
+    bool is_finished(std::shared_ptr<machine_config_type> mc) {
+      bool r = true;
+      switch (mc->tag) {
+        case Machine_fork_mark: {
+          r = r && is_finished(mc->fork_mark.m1);
+          r = r && is_finished(mc->fork_mark.m2);
+          break;
+        }
+        case Machine_thread: {
+          r = is_tail(mc->thread);
+          break;
+        }
+        case Machine_stuck: {
+          assert(false);
+          break;
+        }
+        default: {
+          assert(false);
+        }
+      }
+      return r;
+    }
+    
+    bool is_memory_safe(std::shared_ptr<machine_config_type> mc) {
+      for (auto c : live_chunks_of(mc)) {
+        auto true_refcount = refcount_of_machine(mc, c);
+        auto actual_refcount = c->hdr.refcount.load();
+        if (true_refcount != actual_refcount) {
+          return false;
+        }
+      }
+      return true;
+    }
+    
+    bool overlapping_pointer_ranges(void* a1, void* a2, void* b1, void* b2) {
+      return (a1 < b2) && (b1 < a2);
+    }
+    
+    bool overlapping_addr_ranges(std::pair<void*, void*> r1, std::pair<void*, void*> r2) {
+      return overlapping_pointer_ranges(r1.first, r1.second, r2.first, r2.second);
+    }
+    
+    std::set<std::pair<void*, void*>> frame_addr_ranges(frame_header_type* fp, frame_header_type* sp) {
+      std::set<std::pair<void*, void*>> r;
+      for (auto p : frame_addrs(fp, sp)) {
+        auto q = r.insert(p);
+        assert(q.second);
+      }
+      return r;
+    }
+    
+    template <class T>
+    std::set<T> merge(const std::set<T>& s1, const std::set<T>& s2) {
+      std::set<T> r = s1;
+      for (auto x : s2) {
+        r.insert(x);
+      }
+      return r;
+    }
+    
+    bool is_pairwise_compatible(stack_type s1, stack_type s2) {
+      auto rs1 = merge(frame_addr_ranges(s1.fp, s1.sp),
+                       addr_ranges_of_alloc_reg(s1.fp, s1.sp, s1.lp));
+      auto rs2 = merge(frame_addr_ranges(s2.fp, s2.sp),
+                       addr_ranges_of_alloc_reg(s2.fp, s2.sp, s2.lp));
+      for (auto r1 : rs1) {
+        for (auto r2 : rs2) {
+          if (overlapping_addr_ranges(r1, r2)) {
+            return false;
+          }
+        }
+      }
+      return true;
+    }
+    
+    bool is_pairwise_compatible(std::shared_ptr<machine_config_type> mc) {
+      auto ss = stacks_of(mc);
+      for (auto i = 0; i < ss.size(); i++) {
+        for (auto j = 0; j < ss.size(); j++) {
+          if (i != j) {
+            if (! is_pairwise_compatible(ss[i], ss[j])) {
+              return false;
+            }
+          }
+        }
+      }
+      return true;
+    }
+    
+    /* Predicates */
     /*------------------------------*/
+    
+    /*------------------------------*/
+    /* Quickcheck properties */
+    
+    class property_consitent_machine_config
+    : public quickcheck::Property<machine_config_type> {
+    public:
+      
+      bool holdsFor(const machine_config_type& _mc) {
+        auto mc = std::make_shared<machine_config_type>(_mc);
+        while (! is_finished(mc)) {
+          if (! is_consistent(mc)) {
+            std::cout << "Extraction of stacks from bogus thread configuration:" << std::endl;
+            print_machine_config(std::cout, *mc);
+            return false;
+          }
+          mc = step(mc);
+        }
+        return true;
+      }
+      
+    };
+    
+    class property_correct_refcounts
+    : public quickcheck::Property<machine_config_type> {
+    public:
+      
+      bool holdsFor(const machine_config_type& _mc) {
+        auto mc = std::make_shared<machine_config_type>(_mc);
+        while (! is_finished(mc)) {
+          if (! is_memory_safe(mc)) {
+            std::cout << "Extraction of stacks from bogus thread configuration:" << std::endl;
+            print_machine_config(std::cout, *mc);
+            return false;
+          }
+          mc = step(mc);
+        }
+        return true;
+      }
+      
+    };
+    
+    class property_pairwise_compatible
+    : public quickcheck::Property<machine_config_type> {
+    public:
+      
+      bool holdsFor(const machine_config_type& _mc) {
+        auto mc = std::make_shared<machine_config_type>(_mc);
+        while (! is_finished(mc)) {
+          if (! is_pairwise_compatible(mc)) {
+            std::cout << "Extraction of stacks from bogus thread configuration:" << std::endl;
+            print_machine_config(std::cout, *mc);
+            return false;
+          }
+          mc = step(mc);
+        }
+        return true;
+      }
+      
+    };
+    
+    /* Quickcheck properties */
+    /*------------------------------*/
+    
+    void check_consistency(int nb_tests) {
+      using prop = property_consitent_machine_config;
+      auto msg = "cactus stack is consistent with the spec";
+      quickcheck::check<prop>(msg, nb_tests);
+    }
+    
+    void check_refcounts(int nb_tests) {
+      using prop = property_correct_refcounts;
+      auto msg = "cactus stack has correct refcounts";
+      quickcheck::check<prop>(msg, nb_tests);
+    }
+    
+    void check_pairwise_compatible(int nb_tests) {
+      using prop = property_pairwise_compatible;
+      auto msg = "cactus stack properly separates memory between threads";
+      quickcheck::check<prop>(msg, nb_tests);
+    }
     
   } // end namespace
 } // end namespace
 
+int xxx;
+
 int main(int argc, const char * argv[]) {
-  cactus_stack::plus::machine_config_type tt;
-  std::cout << "Hello, World!\n";
+  xxx = time(nullptr);
+  //srand(1489590221);
+  srand(xxx);
+  int nb_tests = (argc == 2) ? std::stoi(argv[1]) : 1024;
+  cactus_stack::plus::check_pairwise_compatible(nb_tests);
+  cactus_stack::plus::check_refcounts(nb_tests);
+  cactus_stack::plus::check_consistency(nb_tests);
   return 0;
 }
