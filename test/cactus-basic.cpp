@@ -127,7 +127,7 @@ namespace cactus_stack {
       struct {
         std::shared_ptr<struct trace_struct> k;
       } pop_back;
-      struct fork_mark_struct {
+      struct {
         std::shared_ptr<struct trace_struct> k1;
         std::shared_ptr<struct trace_struct> k2;
       } fork_mark;
