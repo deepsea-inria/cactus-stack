@@ -283,11 +283,16 @@ namespace cactus_stack {
       return std::make_shared<machine_config_type>(m);
     }
     
-    std::shared_ptr<machine_config_type> mk_mc_thread(thread_config_type tc) {
+    std::shared_ptr<machine_config_type> mk_mc_thread() {
       machine_config_type m;
       m.tag = Machine_thread;
-      m.thread = tc;
       return std::make_shared<machine_config_type>(m);
+    }
+    
+    std::shared_ptr<machine_config_type> mk_mc_thread(thread_config_type tc) {
+      auto m = mk_mc_thread();
+      m->thread = tc;
+      return m;
     }
     
     void generate(size_t, machine_config_struct& m) {
@@ -398,18 +403,16 @@ namespace cactus_stack {
               } else {
                 rs1 = tc_m.rs;
               }
-              n.fork_mark.m1.reset(new machine_config_type);
-              n.fork_mark.m2.reset(new machine_config_type);
-              machine_config_type& m1 = *n.fork_mark.m1;
-              machine_config_type& m2 = *n.fork_mark.m2;
-              m1.tag = Machine_thread;
-              m1.thread.t = tc_m.t->fork_mark.k1;
-              m1.thread.ms = mp.first;
-              m1.thread.rs = rs1;
-              m2.tag = Machine_thread;
-              m2.thread.t = tc_m.t->fork_mark.k2;
-              m2.thread.ms = mp.second;
-              m2.thread.rs = rs2;
+              n.fork_mark.m1 = mk_mc_thread();
+              n.fork_mark.m2 = mk_mc_thread();
+              thread_config_type& tc1 = n.fork_mark.m1->thread;
+              thread_config_type& tc2 = n.fork_mark.m2->thread;
+              tc1.t = tc_m.t->fork_mark.k1;
+              tc1.ms = mp.first;
+              tc1.rs = rs1;
+              tc2.t = tc_m.t->fork_mark.k2;
+              tc2.ms = mp.second;
+              tc2.rs = rs2;
               break;
             }
             case Trace_push_back: {
