@@ -161,27 +161,20 @@ namespace cactus_stack {
       };
     }
     
-    template <class Private_frame, class Shared_frame>
-    stack_type create_stack(Private_frame* p_f, Shared_frame* p_s) {
-      stack_type s = create_stack();
-      assert(false); // todo
-      return s;
-    }
-    
     bool empty(stack_type s) {
       return s.fp == nullptr;
     }
     
-    template <class Frame>
-    Frame* peek_back(stack_type s) {
-      assert(false); // todo
-      return nullptr;
+    template <class Read_fn>
+    void peek_back(stack_type s, const Read_fn& read_fn) {
+      assert(! empty(s));
+      read_fn(s.fp->ext.sft, frame_data(s.fp));
     }
     
-    template <class Frame1, class Frame2>
-    std::pair<Frame1*, Frame2*> peek_mark(stack_type s) {
-      assert(false); // todo
-      return std::make_pair(nullptr, nullptr);
+    template <class Read_fn>
+    void peek_mark(stack_type s, const Read_fn& read_fn) {
+      assert(s.mhd != nullptr);
+      read_fn(s.mhd->ext.sft, s.mhd->ext.clt, s.mhd->pred, frame_data(s.mhd));
     }
     
     using parent_link_type = enum {
@@ -189,7 +182,8 @@ namespace cactus_stack {
     };
     
     template <int frame_szb, class Initialize_fn, class Is_splittable_fn>
-    stack_type push_back(stack_type s, parent_link_type ty,
+    stack_type push_back(stack_type s,
+                         parent_link_type ty,
                          const Initialize_fn& initialize_fn,
                          const Is_splittable_fn& is_splittable_fn) {
       stack_type t = s;
@@ -295,9 +289,39 @@ namespace cactus_stack {
       return std::make_pair(s1, s2);
     }
     
-    std::pair<stack_type, stack_type> split_mark(stack_type s) {
-      assert(false); // todo
-      return std::make_pair(create_stack(), create_stack());
+    template <class Is_splittable_fn>
+    std::pair<stack_type, stack_type> split_mark(stack_type s,
+                                                 const Is_splittable_fn& is_splittable_fn) {
+      stack_type s1 = s;
+      stack_type s2 = create_stack();
+      frame_header_type* p_f = s.mhd;
+      if (p_f == nullptr) {
+        return std::make_pair(s1, s2);
+      }
+      frame_header_type* p_c = p_f->ext.succ;
+      if (p_c == nullptr) {
+        return std::make_pair(s1, s2);
+      }
+      p_c->pred = nullptr;
+      s1.fp = p_f;
+      s1.sp = (frame_header_type*)create_chunk(nullptr, nullptr);
+      s1.lp = (frame_header_type*)(((char*)s1.sp) + K);
+      s2 = s;
+      s2.mhd = ((p_c->ext.clt == Call_link_async) ||
+                (is_splittable_fn(frame_data(p_c)))) ? p_c : p_c->ext.succ;
+      if (s2.mhd == nullptr) {
+        s2.mtl = nullptr;
+      }
+      return std::make_pair(s1, s2);
+    }
+    
+    template <int frame_szb, class Initialize_fn, class Is_splittable_fn>
+    stack_type create_stack(const Initialize_fn& initialize_fn,
+                            const Is_splittable_fn& is_splittable_fn) {
+      stack_type s = create_stack();
+      s = push_back<frame_szb>(s, Parent_link_sync, initialize_fn, is_splittable_fn);
+      s.fp->ext.sft = Shared_frame_indirect;
+      return s;
     }
     
     /* Stack */

@@ -30,18 +30,24 @@ namespace cactus_stack {
     
     class shared_frame {
     public:
-      int v;
+      shared_frame* v = nullptr;
       parent_link_type plt;
     };
     
     class private_frame {
     public:
       int v;
+      int lo = 0;
+      int hi = 0;
       int nb_iters() {
-        return 1;
+        return hi - lo;
       }
       private_frame split(shared_frame*, float r) {
-        private_frame p;
+        private_frame p = *this;
+        // for now, ignore parameter r, and just split half
+        int mid = (lo + hi) / 2;
+        hi = mid;
+        p.lo = mid;
         return p;
       }
     };
@@ -55,7 +61,6 @@ namespace cactus_stack {
     frame gen_random_frame() {
       frame f;
       f.p.v = quickcheck::generateInRange(0, 1024);
-      f.s.v = quickcheck::generateInRange(0, 1024);
       f.s.plt = (flip_coin() ? Parent_link_sync : Parent_link_async);
       return f;
     }
@@ -166,7 +171,7 @@ namespace cactus_stack {
       struct {
         std::shared_ptr<struct trace_struct> k;
       } pop_back;
-      struct fork_mark_struct {
+      struct {
         std::shared_ptr<struct trace_struct> k1;
         std::shared_ptr<struct trace_struct> k2;
       } fork_mark;
@@ -301,7 +306,8 @@ namespace cactus_stack {
     }
     
     using machine_tag_type = enum {
-      Machine_fork_mark, Machine_thread, Machine_stuck
+      Machine_fork_mark, Machine_split_mark_root, Machine_split_mark_nonroot,
+      Machine_thread, Machine_stuck
     };
     
     using machine_config_type = struct machine_config_struct {
@@ -310,6 +316,15 @@ namespace cactus_stack {
         std::shared_ptr<struct machine_config_struct> m1;
         std::shared_ptr<struct machine_config_struct> m2;
       } fork_mark;
+      struct {
+        std::shared_ptr<struct machine_config_struct> m1;
+        std::shared_ptr<struct machine_config_struct> m2;
+        std::shared_ptr<struct machine_config_struct> k;
+      } split_mark_root;
+      struct {
+        std::shared_ptr<struct machine_config_struct> m1;
+        std::shared_ptr<struct machine_config_struct> m2;
+      } split_mark_nonroot;
       thread_config_type thread;
     };
     
@@ -322,11 +337,36 @@ namespace cactus_stack {
       return std::make_shared<machine_config_type>(m);
     }
     
-    std::shared_ptr<machine_config_type> mk_mc_thread(thread_config_type tc) {
+    std::shared_ptr<machine_config_type> mk_mc_split_mark_root(std::shared_ptr<machine_config_type> m1,
+                                                               std::shared_ptr<machine_config_type> m2,
+                                                               std::shared_ptr<machine_config_type> k) {
+      machine_config_type m;
+      m.tag = Machine_split_mark_root;
+      m.split_mark_root.m1 = m1;
+      m.split_mark_root.m2 = m2;
+      m.split_mark_root.k = k;
+      return std::make_shared<machine_config_type>(m);
+    }
+    
+    std::shared_ptr<machine_config_type> mk_mc_split_mark_nonroot(std::shared_ptr<machine_config_type> m1,
+                                                                  std::shared_ptr<machine_config_type> m2) {
+      machine_config_type m;
+      m.tag = Machine_split_mark_nonroot;
+      m.split_mark_nonroot.m1 = m1;
+      m.split_mark_nonroot.m2 = m2;
+      return std::make_shared<machine_config_type>(m);
+    }
+    
+    std::shared_ptr<machine_config_type> mk_mc_thread() {
       machine_config_type m;
       m.tag = Machine_thread;
-      m.thread = tc;
       return std::make_shared<machine_config_type>(m);
+    }
+    
+    std::shared_ptr<machine_config_type> mk_mc_thread(thread_config_type tc) {
+      auto m = mk_mc_thread();
+      m->thread = tc;
+      return m;
     }
     
     void generate(size_t, machine_config_struct& m) {
@@ -374,6 +414,29 @@ namespace cactus_stack {
           }
           break;
         }
+        case Machine_split_mark_root: {
+          out << "^" << std::endl;
+          if (mc.split_mark_root.m1) {
+            print_machine_config(out, *mc.split_mark_root.m1, prefix + (is_tail ? "    " : "│   "), false);
+          }
+          if (mc.split_mark_root.m2) {
+            print_machine_config(out, *mc.split_mark_root.m2, prefix + (is_tail ? "    " : "│   "), false);
+          }
+          if (mc.split_mark_root.k) {
+            print_machine_config(out, *mc.split_mark_root.k, prefix + (is_tail ? "    " : "│   "), true);
+          }
+          break;
+        }
+        case Machine_split_mark_nonroot: {
+          out << "~" << std::endl;
+          if (mc.split_mark_nonroot.m1) {
+            print_machine_config(out, *mc.split_mark_nonroot.m1, prefix + (is_tail ? "    " : "│   "), false);
+          }
+          if (mc.split_mark_root.m2) {
+            print_machine_config(out, *mc.split_mark_nonroot.m2, prefix + (is_tail ? "    " : "│   "), true);
+          }
+          break;
+        }
         case Machine_thread: {
           print_stack_consistency_result(out, mc.thread);
           break;
@@ -402,6 +465,8 @@ namespace cactus_stack {
       return mk_mc_thread(gen_random_thread_config());
     }
     
+    bool is_finished(std::shared_ptr<machine_config_type>);
+    
     std::shared_ptr<machine_config_type> step(std::shared_ptr<machine_config_type> m) {
       machine_config_type n;
       n.tag = Machine_stuck;
@@ -417,6 +482,32 @@ namespace cactus_stack {
           }
           break;
         }
+        case Machine_split_mark_root: {
+          n.tag = Machine_split_mark_root;
+          if (is_finished(m->split_mark_root.m1) && is_finished(m->split_mark_root.m2)) {
+            n.split_mark_root.m1 = m->split_mark_root.m1;
+            n.split_mark_root.m2 = m->split_mark_root.m2;
+            n.split_mark_root.k = step(m->split_mark_root.k);
+          } else if (flip_coin()) {
+            n.split_mark_root.m1 = step(m->split_mark_root.m1);
+            n.split_mark_root.m2 = m->split_mark_root.m2;
+          } else {
+            n.split_mark_root.m1 = m->split_mark_root.m1;
+            n.split_mark_root.m2 = step(m->split_mark_root.m2);
+          }
+          break;
+        }
+        case Machine_split_mark_nonroot: {
+          n.tag = Machine_split_mark_nonroot;
+          if (flip_coin()) {
+            n.split_mark_nonroot.m1 = step(m->split_mark_nonroot.m1);
+            n.split_mark_nonroot.m2 = m->split_mark_nonroot.m2;
+          } else {
+            n.split_mark_nonroot.m1 = m->split_mark_nonroot.m1;
+            n.split_mark_nonroot.m2 = step(m->split_mark_nonroot.m2);
+          }
+          break;
+        }
         case Machine_thread: {
           thread_config_type& tc_m = m->thread;
           thread_config_type& tc_n = n.thread;
@@ -425,30 +516,58 @@ namespace cactus_stack {
           }
           switch (tc_m.t->tag) {
             case Trace_fork_mark: {
-              n.tag = Machine_fork_mark;
-              auto mp = fork_mark(tc_m.ms);
               auto rp = fork_mark(tc_m.rs);
-              reference_stack_type rs1, rs2;
-              if (rp.tag == Fork_result_fork) {
-                rs1 = rp.fork.s1;
-                rs1.push_back(rp.fork.f1);
-                rs2 = rp.fork.s2;
-                rs2.push_front(rp.fork.f2);
-              } else {
-                rs1 = tc_m.rs;
+              switch (rp.tag) {
+                case Fork_result_fork:
+                case Fork_result_none: {
+                  auto mp = fork_mark(tc_m.ms);
+                  reference_stack_type rs1, rs2;
+                  n.tag = Machine_fork_mark;
+                  if (rp.tag == Fork_result_fork) {
+                    rs1 = rp.fork.s1;
+                    rs1.push_back(rp.fork.f1);
+                    rs2 = rp.fork.s2;
+                    rs2.push_front(rp.fork.f2);
+                  } else if (rp.tag == Fork_result_none) {
+                    rs1 = tc_m.rs;
+                  }
+                  n.fork_mark.m1 = mk_mc_thread();
+                  n.fork_mark.m2 = mk_mc_thread();
+                  thread_config_type& n1 = n.fork_mark.m1->thread;
+                  thread_config_type& n2 = n.fork_mark.m2->thread;
+                  n1.t = tc_m.t->fork_mark.k1;
+                  n1.ms = mp.first;
+                  n1.rs = rs1;
+                  n2.t = tc_m.t->fork_mark.k2;
+                  n2.ms = mp.second;
+                  n2.rs = rs2;
+                  break;
+                }
+                case Fork_result_loop_split: {
+                  n.tag = Machine_split_mark_root;
+                  auto ss = split_mark(tc_m.ms, [&] (char* _fp) {
+                    frame* fp = (frame*)_fp;
+                    return fp->p.nb_iters() >= 2;
+                  });
+                  n.split_mark_root.m1 = mk_mc_thread();
+                  n.split_mark_root.m2 = mk_mc_thread();
+                  n.split_mark_root.k = mk_mc_thread();
+                  thread_config_type& tc1 = n.split_mark_root.m1->thread;
+                  thread_config_type& tc2 = n.split_mark_root.m2->thread;
+                  thread_config_type& k = n.split_mark_root.k->thread;
+                  reference_stack_type rs1 = rp.loop_split.s1;
+                  reference_stack_type rs2 = rp.loop_split.s2;
+                  frame f = rp.loop_split.f;
+                  k.rs = rs1;
+                  k.rs.push_back(f);
+                  k.ms = ss.first;
+                  assert(false);
+                  break;
+                }
+                default: {
+                  assert(false);
+                }
               }
-              n.fork_mark.m1.reset(new machine_config_type);
-              n.fork_mark.m2.reset(new machine_config_type);
-              machine_config_type& m1 = *n.fork_mark.m1;
-              machine_config_type& m2 = *n.fork_mark.m2;
-              m1.tag = Machine_thread;
-              m1.thread.t = tc_m.t->fork_mark.k1;
-              m1.thread.ms = mp.first;
-              m1.thread.rs = rs1;
-              m2.tag = Machine_thread;
-              m2.thread.t = tc_m.t->fork_mark.k2;
-              m2.thread.ms = mp.second;
-              m2.thread.rs = rs2;
               break;
             }
             case Trace_push_back: {
