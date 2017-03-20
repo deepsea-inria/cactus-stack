@@ -274,15 +274,6 @@ namespace cactus_stack {
       thread_config_type thread;
     };
     
-    std::shared_ptr<machine_config_type> mk_mc_fork_mark(std::shared_ptr<machine_config_type> m1,
-                                                         std::shared_ptr<machine_config_type> m2) {
-      machine_config_type m;
-      m.tag = Machine_fork_mark;
-      m.fork_mark.m1 = m1;
-      m.fork_mark.m2 = m2;
-      return std::make_shared<machine_config_type>(m);
-    }
-    
     std::shared_ptr<machine_config_type> mk_mc_thread() {
       machine_config_type m;
       m.tag = Machine_thread;
@@ -871,12 +862,12 @@ namespace cactus_stack {
   } // end namespace
 } // end namespace
 
-int xxx;
+time_t xxx;
 
 int main(int argc, const char * argv[]) {
   xxx = time(nullptr);
   //srand(1489590221);
-  srand(xxx);
+  srand((unsigned int)xxx);
   int nb_tests = (argc == 2) ? std::stoi(argv[1]) : 1024;
   cactus_stack::basic::check_pairwise_compatible(nb_tests);
   cactus_stack::basic::check_refcounts(nb_tests);
