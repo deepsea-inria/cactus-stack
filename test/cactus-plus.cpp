@@ -36,18 +36,16 @@ namespace cactus_stack {
     
     class private_frame {
     public:
-      int v;
-      int lo = 0;
-      int hi = 0;
-      int nb_iters() {
+      size_t v;
+      size_t lo = 0;
+      size_t hi = 0;
+      size_t nb_iters() {
         return hi - lo;
       }
-      private_frame split(shared_frame*, float r) {
+      private_frame split(shared_frame*, size_t nb) {
         private_frame p = *this;
-        // for now, ignore parameter r, and just split half
-        int mid = (lo + hi) / 2;
-        hi = mid;
-        p.lo = mid;
+        p.lo += nb;
+        hi = p.lo;
         return p;
       }
     };
@@ -107,12 +105,12 @@ namespace cactus_stack {
       fork_result_tag tag;
       struct {
         reference_stack_type s1, s2;
-        frame f;
-      } loop_split;
-      struct {
-        reference_stack_type s1, s2;
         frame f1, f2;
       } fork;
+      struct {
+        reference_stack_type s1, s2;
+        frame f;
+      } loop_split;
     };
     
     fork_result_type fork_mark(reference_stack_type& s) {
@@ -317,7 +315,8 @@ namespace cactus_stack {
         std::shared_ptr<struct machine_config_struct> m2;
       } fork_mark;
       struct {
-        std::shared_ptr<struct machine_config_struct> m1;
+        std::shared_ptr<struct machine_config_struct> m11;
+        std::shared_ptr<struct machine_config_struct> m12;
         std::shared_ptr<struct machine_config_struct> m2;
         std::shared_ptr<struct machine_config_struct> k;
       } split_mark_root;
@@ -327,35 +326,6 @@ namespace cactus_stack {
       } split_mark_nonroot;
       thread_config_type thread;
     };
-    
-    std::shared_ptr<machine_config_type> mk_mc_fork_mark(std::shared_ptr<machine_config_type> m1,
-                                                         std::shared_ptr<machine_config_type> m2) {
-      machine_config_type m;
-      m.tag = Machine_fork_mark;
-      m.fork_mark.m1 = m1;
-      m.fork_mark.m2 = m2;
-      return std::make_shared<machine_config_type>(m);
-    }
-    
-    std::shared_ptr<machine_config_type> mk_mc_split_mark_root(std::shared_ptr<machine_config_type> m1,
-                                                               std::shared_ptr<machine_config_type> m2,
-                                                               std::shared_ptr<machine_config_type> k) {
-      machine_config_type m;
-      m.tag = Machine_split_mark_root;
-      m.split_mark_root.m1 = m1;
-      m.split_mark_root.m2 = m2;
-      m.split_mark_root.k = k;
-      return std::make_shared<machine_config_type>(m);
-    }
-    
-    std::shared_ptr<machine_config_type> mk_mc_split_mark_nonroot(std::shared_ptr<machine_config_type> m1,
-                                                                  std::shared_ptr<machine_config_type> m2) {
-      machine_config_type m;
-      m.tag = Machine_split_mark_nonroot;
-      m.split_mark_nonroot.m1 = m1;
-      m.split_mark_nonroot.m2 = m2;
-      return std::make_shared<machine_config_type>(m);
-    }
     
     std::shared_ptr<machine_config_type> mk_mc_thread() {
       machine_config_type m;
@@ -416,8 +386,11 @@ namespace cactus_stack {
         }
         case Machine_split_mark_root: {
           out << "^" << std::endl;
-          if (mc.split_mark_root.m1) {
-            print_machine_config(out, *mc.split_mark_root.m1, prefix + (is_tail ? "    " : "│   "), false);
+          if (mc.split_mark_root.m11) {
+            print_machine_config(out, *mc.split_mark_root.m11, prefix + (is_tail ? "    " : "│   "), false);
+          }
+          if (mc.split_mark_root.m12) {
+            print_machine_config(out, *mc.split_mark_root.m12, prefix + (is_tail ? "    " : "│   "), false);
           }
           if (mc.split_mark_root.m2) {
             print_machine_config(out, *mc.split_mark_root.m2, prefix + (is_tail ? "    " : "│   "), false);
@@ -484,16 +457,29 @@ namespace cactus_stack {
         }
         case Machine_split_mark_root: {
           n.tag = Machine_split_mark_root;
-          if (is_finished(m->split_mark_root.m1) && is_finished(m->split_mark_root.m2)) {
-            n.split_mark_root.m1 = m->split_mark_root.m1;
+          bool finished_m11 = is_finished(m->split_mark_root.m11);
+          bool finished_m12 = is_finished(m->split_mark_root.m12);
+          bool finished_m2 = is_finished(m->split_mark_root.m2);
+          if (finished_m11 && finished_m12 && finished_m2) {
+            n.split_mark_root.m11 = m->split_mark_root.m11;
+            n.split_mark_root.m12 = m->split_mark_root.m12;
             n.split_mark_root.m2 = m->split_mark_root.m2;
             n.split_mark_root.k = step(m->split_mark_root.k);
           } else if (flip_coin()) {
-            n.split_mark_root.m1 = step(m->split_mark_root.m1);
+            if (finished_m11) {
+              n.split_mark_root.m11 = step(m->split_mark_root.m11);
+              n.split_mark_root.m12 = m->split_mark_root.m12;
+            } else {
+              n.split_mark_root.m11 = m->split_mark_root.m11;
+              n.split_mark_root.m12 = step(m->split_mark_root.m12);
+            }
             n.split_mark_root.m2 = m->split_mark_root.m2;
+            n.split_mark_root.k = m->split_mark_root.k;
           } else {
-            n.split_mark_root.m1 = m->split_mark_root.m1;
+            n.split_mark_root.m11 = m->split_mark_root.m11;
+            n.split_mark_root.m12 = m->split_mark_root.m12;
             n.split_mark_root.m2 = step(m->split_mark_root.m2);
+            n.split_mark_root.k = m->split_mark_root.k;
           }
           break;
         }
@@ -549,10 +535,14 @@ namespace cactus_stack {
                     frame* fp = (frame*)_fp;
                     return fp->p.nb_iters() >= 2;
                   });
-                  n.split_mark_root.m1 = mk_mc_thread();
+                  stack_type s1 = ss.first;
+                  stack_type s2 = ss.second;
+                  n.split_mark_root.m11 = mk_mc_thread();
+                  n.split_mark_root.m12 = mk_mc_thread();
                   n.split_mark_root.m2 = mk_mc_thread();
                   n.split_mark_root.k = mk_mc_thread();
-                  thread_config_type& tc1 = n.split_mark_root.m1->thread;
+                  thread_config_type& tc11 = n.split_mark_root.m11->thread;
+                  thread_config_type& tc12 = n.split_mark_root.m12->thread;
                   thread_config_type& tc2 = n.split_mark_root.m2->thread;
                   thread_config_type& k = n.split_mark_root.k->thread;
                   reference_stack_type rs1 = rp.loop_split.s1;
@@ -560,8 +550,14 @@ namespace cactus_stack {
                   frame f = rp.loop_split.f;
                   k.rs = rs1;
                   k.rs.push_back(f);
-                  k.ms = ss.first;
-                  assert(false);
+                  k.ms = s1;
+                  frame* p_f = nullptr;
+                  shared_frame_type sft;
+                  peek_back(s1, [&] (shared_frame_type _sft, char* _fp) {
+                    p_f = (frame*)_fp;
+                    sft = _sft;
+                  });
+
                   break;
                 }
                 default: {
@@ -1035,12 +1031,12 @@ namespace cactus_stack {
   } // end namespace
 } // end namespace
 
-int xxx;
+time_t xxx;
 
 int main(int argc, const char * argv[]) {
   xxx = time(nullptr);
   //srand(1489590221);
-  srand(xxx);
+  srand((unsigned int)xxx);
   int nb_tests = (argc == 2) ? std::stoi(argv[1]) : 1024;
   cactus_stack::plus::check_pairwise_compatible(nb_tests);
   cactus_stack::plus::check_refcounts(nb_tests);
