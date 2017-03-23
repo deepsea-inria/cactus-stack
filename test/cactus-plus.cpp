@@ -531,10 +531,11 @@ namespace cactus_stack {
                 }
                 case Fork_result_loop_split: {
                   n.tag = Machine_split_mark_root;
-                  auto ss = split_mark(tc_m.ms, [&] (char* _fp) {
+                  auto is_splittable_fn = [&] (char* _fp) {
                     frame* fp = (frame*)_fp;
                     return fp->p.nb_iters() >= 2;
-                  });
+                  };
+                  auto ss = split_mark(tc_m.ms, is_splittable_fn);
                   stack_type s1 = ss.first;
                   stack_type s2 = ss.second;
                   n.split_mark_root.m11 = mk_mc_thread();
@@ -547,17 +548,39 @@ namespace cactus_stack {
                   thread_config_type& k = n.split_mark_root.k->thread;
                   reference_stack_type rs1 = rp.loop_split.s1;
                   reference_stack_type rs2 = rp.loop_split.s2;
-                  frame f = rp.loop_split.f;
                   k.rs = rs1;
-                  k.rs.push_back(f);
+                  k.rs.push_back(rp.loop_split.f);
+                  frame& rf = k.rs.back();
+                  tc11.rs.push_back(frame());
+                  frame& rf11 = tc11.rs.back();
+                  rf11.s.v = &(rf.s);
+                  rf11.p = rf.p.split(&(rf.s), rf.p.nb_iters());
+                  tc2.rs.push_back(frame());
+                  frame& rf2 = tc2.rs.back();
+                  rf2.s.v = &(rf.s);
+                  rf2.p = rf11.p.split(&(rf.s), rf11.p.nb_iters() / 2);
                   k.ms = s1;
-                  frame* p_f = nullptr;
+                  tc12.rs = rs2;
+                  tc12.ms = s2;
+                  frame* mf = nullptr;
                   shared_frame_type sft;
                   peek_back(s1, [&] (shared_frame_type _sft, char* _fp) {
-                    p_f = (frame*)_fp;
+                    mf = (frame*)_fp;
                     sft = _sft;
                   });
-
+                  frame* mf11 = nullptr;
+                  tc11.ms = create_stack<sizeof(frame)>([&] (char* _fp) {
+                    mf11 = (frame*)_fp;
+                    new (mf11) frame;
+                    mf11->s.v = &(mf->s);
+                    mf11->p = mf->p.split(&(mf11->s), mf->p.nb_iters());
+                  }, is_splittable_fn);
+                  tc2.ms = create_stack<sizeof(frame)>([&] (char* _fp) {
+                    frame* mf2 = (frame*)_fp;
+                    new (mf2) frame;
+                    mf2->s.v = &(mf->s);
+                    mf2->p = mf11->p.split(&(mf11->s), mf11->p.nb_iters() / 2);
+                  }, is_splittable_fn);
                   break;
                 }
                 default: {
