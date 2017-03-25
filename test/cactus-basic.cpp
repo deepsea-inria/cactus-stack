@@ -246,7 +246,7 @@ namespace cactus_stack {
     
     using thread_config_type = struct {
       std::shared_ptr<trace_type> t;
-      reference_stack_type rs; // reference stack
+      reference_stack_type rs;
       machine_stack_type ms;
     };
     
