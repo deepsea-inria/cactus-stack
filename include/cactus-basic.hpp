@@ -172,9 +172,9 @@ namespace cactus_stack {
     template <int frame_szb, class Initialize_fn>
     stack_type push_back(stack_type s, parent_link_type ty,
                          const Initialize_fn& initialize_fn) {
-      assert(frame_szb + sizeof(frame_header_type) <= K);
       stack_type t = s;
       auto b = sizeof(frame_header_type) + frame_szb;
+      assert(b + sizeof(chunk_header_type) <= K);
       t.fp = s.sp;
       t.sp = (frame_header_type*)((char*)t.fp + b);
       if (t.sp >= t.lp) {
