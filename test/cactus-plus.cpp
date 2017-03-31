@@ -124,49 +124,70 @@ namespace cactus_stack {
       } loop_split;
     };
     
-    fork_result_type fork_mark(reference_stack_type& s) {
-      fork_result_type r;
+    std::pair<fork_result_tag, size_t> fork_mark_status(const reference_stack_type& s) {
       static constexpr
-      int not_found = -1;
-      size_t k = not_found;
-      auto nb_frames = s.size();
-      for (size_t i = 0; i < nb_frames; i++) {
-        if (is_marked(s[i])) {
-          k = i;
-          break;
+      size_t not_found = -1;
+      auto find_index = [&] {
+        size_t k = not_found;
+        auto nb_frames = s.size();
+        for (size_t i = 0; i < nb_frames; i++) {
+          if (is_marked(s[i])) {
+            k = i;
+            break;
+          }
         }
-      }
-      auto oldest_frame_is_k = [&] {
-        return k == 0;
+        return k;
       };
-      if ((k == not_found) || (oldest_frame_is_k() && ! is_splittable(s[k].p))) {
-        r.tag = Fork_result_none;
-        return r;
+      size_t k = find_index();
+      if ((k == not_found) || ((k == 0) && ! is_splittable(s[k].p))) {
+        return std::make_pair(Fork_result_none, k);
       }
-      reference_stack_type s1(s.begin(), s.begin() + k);
-      reference_stack_type s2(s.begin() + k, s.end());
-      if (! oldest_frame_is_k() && (s[k].s.plt == Parent_link_async)) {
-        assert(! oldest_frame_is_k());
-        r.tag = Fork_result_fork;
-        r.fork.s1 = s1;
-        r.fork.s2 = s2;
-        r.fork.s1.pop_back();
-        r.fork.s2.pop_front();
-        r.fork.f1 = s1.back();
-        r.fork.f2 = s2.front();
-        return r;
+      if (! (k == 0) && (s[k].s.plt == Parent_link_async)) {
+        return std::make_pair(Fork_result_fork, k);
       }
       assert(is_splittable(s[k].p));
-      r.tag = Fork_result_loop_split;
-      r.loop_split.s1 = s1;
-      r.loop_split.f = s2.front();
-      r.loop_split.s2 = s2;
-      r.loop_split.s2.pop_front();
+      return std::make_pair(Fork_result_loop_split, k);
+    }
+    
+    fork_result_type fork_mark(reference_stack_type& s) {
+      fork_result_type r;
+      auto _p = fork_mark_status(s);
+      r.tag = _p.first;
+      if (r.tag == Fork_result_none) {
+        return r;
+      }
+      size_t k = _p.second;
+      reference_stack_type s1(s.begin(), s.begin() + k);
+      reference_stack_type s2(s.begin() + k, s.end());
+      switch (r.tag) {
+        case Fork_result_fork: {
+          r.tag = Fork_result_fork;
+          r.fork.s1 = s1;
+          r.fork.s2 = s2;
+          r.fork.s1.pop_back();
+          r.fork.s2.pop_front();
+          r.fork.f1 = s1.back();
+          r.fork.f2 = s2.front();
+          break;
+        }
+        case Fork_result_loop_split: {
+          r.tag = Fork_result_loop_split;
+          r.loop_split.s1 = s1;
+          r.loop_split.f = s2.front();
+          r.loop_split.s2 = s2;
+          r.loop_split.s2.pop_front();
+          break;
+        }
+        default: {
+          assert(false);
+        }
+      }
       return r;
     }
     
     using trace_tag_type = enum {
-      Trace_push_back, Trace_pop_back, Trace_fork_mark, Trace_nil
+      Trace_push_back, Trace_pop_back, Trace_fork_mark,
+      Trace_split_mark, Trace_nil
     };
     
     struct trace_struct {
@@ -182,6 +203,12 @@ namespace cactus_stack {
         std::shared_ptr<struct trace_struct> k1;
         std::shared_ptr<struct trace_struct> k2;
       } fork_mark;
+      struct {
+        std::shared_ptr<struct trace_struct> k11;
+        std::shared_ptr<struct trace_struct> k12;
+        std::shared_ptr<struct trace_struct> k2;
+        std::shared_ptr<struct trace_struct> k;
+      } split_mark;
     };
     
     using trace_type = struct trace_struct;
@@ -205,6 +232,12 @@ namespace cactus_stack {
       return std::make_shared<trace_type>(t);
     }
     
+    std::shared_ptr<trace_type> mk_split_mark() {
+      trace_type t;
+      t.tag = Trace_split_mark;
+      return std::make_shared<trace_type>(t);
+    }
+    
     void print_trace(std::ostream& out, std::shared_ptr<trace_type> t, const std::string& prefix, bool is_tail) {
       out << (prefix + (is_tail ? "└── " : "├── "));
       switch (t->tag) {
@@ -215,6 +248,22 @@ namespace cactus_stack {
           }
           if (t->fork_mark.k2) {
             print_trace(out, t->fork_mark.k2, prefix + (is_tail ? "    " : "│   "), true);
+          }
+          break;
+        }
+        case Trace_split_mark: {
+          out << "^" << std::endl;
+          if (t->split_mark.k11) {
+            print_trace(out, t->split_mark.k11, prefix + (is_tail ? "    " : "│   "), false);
+          }
+          if (t->split_mark.k12) {
+            print_trace(out, t->split_mark.k12, prefix + (is_tail ? "    " : "│   "), false);
+          }
+          if (t->split_mark.k2) {
+            print_trace(out, t->split_mark.k2, prefix + (is_tail ? "    " : "│   "), false);
+          }
+          if (t->split_mark.k) {
+            print_trace(out, t->split_mark.k, prefix + (is_tail ? "    " : "│   "), true);
           }
           break;
         }
@@ -250,29 +299,30 @@ namespace cactus_stack {
     
     std::shared_ptr<trace_type> gen_random_trace(const std::deque<frame>& prefix, int d) {
       std::shared_ptr<trace_type> r;
-      auto n_p = prefix.size();
-      if (n_p == 0) {
+      auto np = prefix.size();
+      if (np == 0) {
         return r;
       }
-      auto position_of_top_async = [&] (const std::deque<frame>& fs) {
-        static constexpr
-        int not_found = -1;
-        for (int i = 0; i < fs.size(); i++) {
-          if (is_marked(fs[i])) {
-            return i;
-          }
-        }
-        return not_found;
-      };
-      auto posn = position_of_top_async(prefix);
-      bool can_fork = (posn > 0);
-      if (can_fork && (quickcheck::generateInRange(0, d - 1) == 0)) {
+      auto _p = fork_mark_status(prefix);
+      fork_result_tag ft = _p.first;
+      size_t k = _p.second;
+      if ((ft == Fork_result_fork) && (quickcheck::generateInRange(0, d - 1) == 0)) {
         r = mk_fork_mark();
-        std::deque<frame> prefix1(prefix.begin(), prefix.begin() + posn);
-        std::deque<frame> prefix2(prefix.begin() + posn, prefix.end());
+        std::deque<frame> prefix1(prefix.begin(), prefix.begin() + k);
+        std::deque<frame> prefix2(prefix.begin() + k, prefix.end());
         r->fork_mark.k1 = gen_random_trace(prefix1, d + 1);
         r->fork_mark.k2 = gen_random_trace(prefix2, d + 1);
-      } else if (quickcheck::generateInRange(0, (2 + (1 << n_p)) - 1) < 3) {
+      } else if ((ft == Fork_result_loop_split) && (quickcheck::generateInRange(0, d - 1) == 0)) {
+        r = mk_split_mark();
+        auto pk = ((k + 1 == prefix.size()) ? prefix.end() : prefix.begin() + (k + 1));
+        std::deque<frame> prefix1(prefix.begin(), pk);
+        std::deque<frame> prefix2(pk, prefix.end());
+        r->split_mark.k11 = gen_random_trace({ }, d + 1);
+        r->split_mark.k12 = gen_random_trace(prefix2, d + 1);
+        r->split_mark.k2 = gen_random_trace({ }, d + 1);
+        r->split_mark.k = gen_random_trace(prefix1, d + 1);
+        assert(false); // todo
+      } else if (quickcheck::generateInRange(0, (2 + (1 << np)) - 1) < 3) {
         auto f = gen_random_frame();
         std::deque<frame> prefix2(prefix);
         prefix2.push_back(f);
@@ -361,13 +411,11 @@ namespace cactus_stack {
       auto ms_mb = marked_frames_bkw(tc.ms.mtl);
       auto rmkd = marked_frames_of(tc.rs);
       if (! equals(tc.rs, ms)) {
-        out << "TC-A{rs=" << tc.rs << ", ms=" << ms << "}" << std::endl;
+        out << "TC-A{rs=" << tc.rs << ", ms=" << ms << "}";
       } else if (! equals(rmkd, ms_mf)) {
-        out << "TC-F{rs=" << rmkd << ", ms=" << ms_mf << "}" << std::endl;
-        out << "TC-A{rs=" << tc.rs << ", ms=" << ms << "}" << std::endl;
-
+        out << "TC-F{rs=" << rmkd << ", ms=" << ms_mf << "}";
       } else if (! equals(rmkd, ms_mb)) {
-        out << "TC-B{rs=" << rmkd << ", ms=" << ms_mb << "}" << std::endl;
+        out << "TC-B{rs=" << rmkd << ", ms=" << ms_mb << "}";
       } else {
         out << "TC{}";
       }
@@ -519,6 +567,23 @@ namespace cactus_stack {
                   break;
                 }
                 case Fork_result_loop_split: {
+                  assert(false);
+                  break;
+                }
+                default: {
+                  assert(false);
+                }
+              }
+              break;
+            }
+            case Trace_split_mark: {
+              auto fr = fork_mark(tc_m.rs);
+              switch (fr.tag) {
+                case Fork_result_fork: {
+                  assert(false);
+                  break;
+                }
+                case Fork_result_loop_split: {
                   n.tag = Machine_split_mark;
                   n.split_mark.m11 = mk_mc_thread();
                   n.split_mark.m12 = mk_mc_thread();
@@ -567,6 +632,13 @@ namespace cactus_stack {
                   tc11.ms = update_front(tc11.ms, is_splittable_fn);
                   tc12.ms = update_front(tc12.ms, is_splittable_fn);
                   k.ms = update_front(k.ms, is_splittable_fn);
+                  tc11.t = tc_m.t->split_mark.k11;
+                  tc12.t = tc_m.t->split_mark.k12;
+                  tc2.t = tc_m.t->split_mark.k2;
+                  k.t = tc_m.t->split_mark.k;
+                  break;
+                }
+                case Fork_result_none: {
                   break;
                 }
                 default: {
@@ -1073,8 +1145,8 @@ time_t xxx;
 
 int main(int argc, const char * argv[]) {
   xxx = time(nullptr);
-  srand(1490803734);
-  //srand((unsigned int)xxx);
+  //srand(1490803734);
+  srand((unsigned int)xxx);
   int nb_tests = (argc == 2) ? std::stoi(argv[1]) : 1024;
   cactus_stack::plus::check_consistency(nb_tests);
   //cactus_stack::plus::check_pairwise_compatible(nb_tests);
