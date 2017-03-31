@@ -30,7 +30,8 @@ namespace cactus_stack {
     
     class shared_frame {
     public:
-      shared_frame* v = nullptr;
+      size_t v;
+      shared_frame* p = nullptr;
       parent_link_type plt;
     };
     
@@ -67,6 +68,7 @@ namespace cactus_stack {
       int max_nb_iters = 10;
       frame f;
       f.s.plt = (flip_coin() ? Parent_link_sync : Parent_link_async);
+      f.s.v = quickcheck::generateInRange(0, max_val);
       f.p.v = quickcheck::generateInRange(0, max_val);
       f.p.hi = quickcheck::generateInRange(0, max_nb_iters);
       return f;
@@ -74,7 +76,8 @@ namespace cactus_stack {
     
     std::ostream& operator<<(std::ostream& out, const frame& f) {
       auto ty_s = (f.s.plt == Parent_link_async) ? "A" : "S";
-      out << "{s.v=" << f.s.v << ", p.v=" << f.p.v <<
+      auto sv = (f.s.p == nullptr) ? "null" : std::to_string(f.s.p->v);
+      out << "{s.v=" << sv << ", p.v=" << f.p.v <<
       ", ty=" << ty_s << ", nb=" << f.p.nb_iters() << "}";
       return out;
     }
@@ -321,7 +324,6 @@ namespace cactus_stack {
         r->split_mark.k12 = gen_random_trace(prefix2, d + 1);
         r->split_mark.k2 = gen_random_trace({ }, d + 1);
         r->split_mark.k = gen_random_trace(prefix1, d + 1);
-        assert(false); // todo
       } else if (quickcheck::generateInRange(0, (2 + (1 << np)) - 1) < 3) {
         auto f = gen_random_frame();
         std::deque<frame> prefix2(prefix);
@@ -601,12 +603,12 @@ namespace cactus_stack {
                   frame& rf = k.rs.back();
                   tc11.rs.push_back(frame());
                   frame& rf11 = tc11.rs.back();
-                  rf11.s.v = &(rf.s);
+                  rf11.s.p = &(rf.s);
                   rf11.p = rf.p.split(&(rf.s), rf.p.nb_iters());
                   tc12.rs = fr.loop_split.s2;
                   tc2.rs.push_back(frame());
                   frame& rf2 = tc2.rs.back();
-                  rf2.s.v = &(rf.s);
+                  rf2.s.p = &(rf.s);
                   rf2.p = rf11.p.split(&(rf.s), rf11.p.nb_iters() / 2);
                   k.ms = s1;
                   frame* mf = nullptr;
@@ -619,14 +621,14 @@ namespace cactus_stack {
                   tc11.ms = create_stack<sizeof(frame)>([&] (char* _fp) {
                     mf11 = (frame*)_fp;
                     new (mf11) frame;
-                    mf11->s.v = &(mf->s);
+                    mf11->s.p = &(mf->s);
                     mf11->p = mf->p.split(&(mf11->s), mf->p.nb_iters());
                   }, is_splittable_fn);
                   tc12.ms = s2;
                   tc2.ms = create_stack<sizeof(frame)>([&] (char* _fp) {
                     frame* mf2 = (frame*)_fp;
                     new (mf2) frame;
-                    mf2->s.v = &(mf->s);
+                    mf2->s.p = &(mf->s);
                     mf2->p = mf11->p.split(&(mf11->s), mf11->p.nb_iters() / 2);
                   }, is_splittable_fn);
                   tc11.ms = update_front(tc11.ms, is_splittable_fn);
@@ -773,7 +775,16 @@ namespace cactus_stack {
     }
     
     bool equals(frame f1, frame f2) {
-      return (f1.p.v == f2.p.v) && (f1.s.v == f2.s.v);
+      if (f1.p.v != f2.p.v) {
+        return false;
+      }
+      if (f1.s.p == nullptr) {
+        if (f2.s.p != nullptr) {
+          return false;
+        }
+        return (f1.s.v == f2.s.v);
+      }
+      return f1.s.p->v == f2.s.p->v;
     }
     
     bool equals(const reference_stack_type& fs1,
