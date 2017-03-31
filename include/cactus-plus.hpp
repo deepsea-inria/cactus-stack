@@ -223,7 +223,9 @@ namespace cactus_stack {
       if (s.mtl == s.mhd) {
         t.mtl = succ;
       }
-      assert(t.mhd->ext.llt == Loop_link_none);
+      if (t.mhd != nullptr) {
+        t.mhd->ext.llt = Loop_link_none;
+      }
       return t;
     }
     
