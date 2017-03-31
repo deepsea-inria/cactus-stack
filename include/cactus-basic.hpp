@@ -224,14 +224,14 @@ namespace cactus_stack {
         t.mtl = pred;
       }
       t.fp = s.fp->pred;
-      chunk_type* c_fp = chunk_of(s.fp);
-      if (chunk_of(t.fp) == c_fp) {
+      chunk_type* cfp = chunk_of(s.fp);
+      if (chunk_of(t.fp) == cfp) {
         t.sp = s.fp;
         t.lp = s.lp;
       } else {
-        t.sp = c_fp->hdr.sp;
-        t.lp = c_fp->hdr.lp;
-        decr_refcount(c_fp);
+        t.sp = cfp->hdr.sp;
+        t.lp = cfp->hdr.lp;
+        decr_refcount(cfp);
       }
       return t;
     }
@@ -242,36 +242,36 @@ namespace cactus_stack {
       if (s.mhd == nullptr) {
         return std::make_pair(s1, s2);
       }
-      frame_header_type* p_f1, * p_f2;
+      frame_header_type* pf1, * pf2;
       if (s.mhd->pred == nullptr) {
         if (s.mhd->ext.succ == nullptr) {
           return std::make_pair(s1, s2);
         } else {
           s.mhd->ext.pred = nullptr;
-          p_f2 = s.mhd->ext.succ;
+          pf2 = s.mhd->ext.succ;
           s1.mhd = s.mhd;
         }
       } else {
-        p_f2 = s.mhd;
+        pf2 = s.mhd;
         s1.mhd = nullptr;
       }
-      p_f1 = p_f2->pred;
-      s1.fp = p_f1;
-      chunk_type* c_f1 = chunk_of(p_f1);
-      if (c_f1 == chunk_of(p_f2)) {
-        incr_refcount(c_f1);
+      pf1 = pf2->pred;
+      s1.fp = pf1;
+      chunk_type* cf1 = chunk_of(pf1);
+      if (cf1 == chunk_of(pf2)) {
+        incr_refcount(cf1);
       }
-      if (chunk_of(s.sp) == c_f1) {
-        s1.sp = p_f2;
+      if (chunk_of(s.sp) == cf1) {
+        s1.sp = pf2;
       } else {
         s1.sp = nullptr;
       }
       s1.lp = s1.sp;
       s1.mtl = s1.mhd;
       s2 = s;
-      s2.mhd = p_f2;
-      p_f2->pred = nullptr;
-      p_f2->ext.pred = nullptr;
+      s2.mhd = pf2;
+      pf2->pred = nullptr;
+      pf2->ext.pred = nullptr;
       return std::make_pair(s1, s2);
     }
  
