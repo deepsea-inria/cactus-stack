@@ -244,11 +244,11 @@ namespace cactus_stack {
       }
       frame_header_type* pf1, * pf2;
       if (s.mhd->pred == nullptr) {
-        if (s.mhd->ext.succ == nullptr) {
+        pf2 = s.mhd->ext.succ;
+        if (pf2 == nullptr) {
           return std::make_pair(s1, s2);
         } else {
           s.mhd->ext.pred = nullptr;
-          pf2 = s.mhd->ext.succ;
           s1.mhd = s.mhd;
         }
       } else {
