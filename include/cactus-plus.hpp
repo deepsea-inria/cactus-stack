@@ -181,6 +181,52 @@ namespace cactus_stack {
       Parent_link_async, Parent_link_sync
     };
     
+    template <class Is_splittable_fn>
+    stack_type update_back(stack_type s, const Is_splittable_fn& is_splittable_fn) {
+      stack_type t = s;
+      if (t.mtl == nullptr) {
+        return t;
+      }
+      bool is_async_mtl = (t.mtl->ext.clt == Call_link_async);
+      bool is_splittable_mtl = is_splittable_fn(frame_data(t.mtl));
+      bool is_loop_child_mtl = (t.mtl->ext.llt == Loop_link_child);
+      if (is_async_mtl || is_splittable_mtl || is_loop_child_mtl) {
+        return t;
+      }
+      frame_header_type* pred = t.mtl->ext.pred;
+      t.mtl = pred;
+      if (pred != nullptr) {
+        pred->ext.succ = nullptr;
+      }
+      if (s.mtl == s.mhd) {
+        t.mhd = pred;
+      }
+      return t;
+    }
+    
+    template <class Is_splittable_fn>
+    stack_type update_front(stack_type s, const Is_splittable_fn& is_splittable_fn) {
+      stack_type t = s;
+      if (t.mhd == nullptr) {
+        return t;
+      }
+      bool is_async_mhd = (t.mhd->ext.clt == Call_link_async);
+      bool is_splittable_mhd = is_splittable_fn(frame_data(t.mhd));
+      if (is_async_mhd || is_splittable_mhd) {
+        return t;
+      }
+      frame_header_type* succ = t.mhd->ext.succ;
+      t.mhd = succ;
+      if (succ != nullptr) {
+        succ->ext.pred = nullptr;
+      }
+      if (s.mtl == s.mhd) {
+        t.mtl = succ;
+      }
+      assert(t.mhd->ext.llt == Loop_link_none);
+      return t;
+    }
+    
     template <int frame_szb, class Initialize_fn, class Is_splittable_fn>
     stack_type push_back(stack_type s,
                          parent_link_type ty,
@@ -188,6 +234,7 @@ namespace cactus_stack {
                          const Is_splittable_fn& is_splittable_fn) {
       stack_type t = s;
       auto b = sizeof(frame_header_type) + frame_szb;
+      assert(b + sizeof(chunk_header_type) <= K);
       t.fp = s.sp;
       t.sp = (frame_header_type*)((char*)t.fp + b);
       if (t.sp >= t.lp) {
@@ -198,11 +245,12 @@ namespace cactus_stack {
       }
       initialize_fn(frame_data(t.fp));
       frame_header_ext_type ext;
-      ext.sft = Shared_frame_direct;
-      if (ty == Parent_link_async) {
-        ext.clt = Call_link_async;
+      bool is_async_tfp = (ty == Parent_link_async);
+      bool is_splittable_tfp = is_splittable_fn(frame_data(t.fp));
+      frame_header_type* pred = s.fp;
+      bool is_loop_child_tfp = ((pred != nullptr) && is_splittable_fn(frame_data(pred)));
+      if (is_async_tfp || is_splittable_tfp || is_loop_child_tfp) {
         ext.pred = s.mtl;
-        ext.succ = nullptr;
         if (s.mtl != nullptr) {
           s.mtl->ext.succ = t.fp;
         }
@@ -210,24 +258,28 @@ namespace cactus_stack {
         if (t.mhd == nullptr) {
           t.mhd = t.mtl;
         }
-      } else if (ty == Parent_link_sync) {
-        ext.clt = Call_link_sync;
       } else {
-        assert(false); // impossible
+        ext.pred = nullptr;
       }
-      t.fp->pred = s.fp;
-      ext.llt = (! empty(s) && is_splittable_fn(frame_data(s.fp))
-                 ? Loop_link_child : Loop_link_none);
+      ext.sft = Shared_frame_direct;
+      ext.clt = (is_async_tfp ? Call_link_async : Call_link_sync);
+      ext.llt = (is_loop_child_tfp ? Loop_link_child : Loop_link_none);
+      ext.succ = nullptr;
+      t.fp->pred = pred;
       t.fp->ext = ext;
       return t;
     }
     
-    template <class Destruct_fn>
+    template <class Is_splittable_fn, class Destruct_fn>
     stack_type pop_back(stack_type s,
+                        const Is_splittable_fn& is_splittable_fn,
                         const Destruct_fn& destruct_fn) {
       stack_type t = s;
       destruct_fn(frame_data(s.fp));
-      if (s.fp->ext.clt == Call_link_async) {
+      bool is_splittable_sfp = is_splittable_fn(frame_data(s.fp));
+      bool is_async_sfp = (s.fp->ext.clt == Call_link_async);
+      bool is_loop_child_sfp = (s.fp->ext.llt == Loop_link_child);
+      if (is_async_sfp || is_splittable_sfp || is_loop_child_sfp) {
         frame_header_type* pred = s.fp->ext.pred;
         if (pred == nullptr) {
           t.mhd = nullptr;
@@ -237,55 +289,58 @@ namespace cactus_stack {
         t.mtl = pred;
       }
       t.fp = s.fp->pred;
-      chunk_type* c_fp = chunk_of(s.fp);
-      if (chunk_of(t.fp) == c_fp) {
+      chunk_type* cfp = chunk_of(s.fp);
+      if (chunk_of(t.fp) == cfp) {
         t.sp = s.fp;
         t.lp = s.lp;
       } else {
-        t.sp = c_fp->hdr.sp;
-        t.lp = c_fp->hdr.lp;
-        decr_refcount(c_fp);
+        t.sp = cfp->hdr.sp;
+        t.lp = cfp->hdr.lp;
+        decr_refcount(cfp);
       }
-      return t;
+      return update_back(t, is_splittable_fn);
     }
     
-    std::pair<stack_type, stack_type> fork_mark(stack_type s) {
+    template <class Is_splittable_fn>
+    std::pair<stack_type, stack_type> fork_mark(stack_type s,
+                                                const Is_splittable_fn& is_splittable_fn) {
       stack_type s1 = s;
       stack_type s2 = create_stack();
       if (s.mhd == nullptr) {
         return std::make_pair(s1, s2);
       }
-      frame_header_type* p_f1, * p_f2;
+      frame_header_type* pf1, * pf2;
       if (s.mhd->pred == nullptr) {
-        if (s.mhd->ext.succ == nullptr) {
+        pf2 = s.mhd->ext.succ;
+        if (pf2 == nullptr) {
           return std::make_pair(s1, s2);
         } else {
-          p_f2 = s.mhd->ext.succ;
-          s.mhd->ext.succ = nullptr;
+          s.mhd->ext.pred = nullptr;
+          s1.mhd = s.mhd;
         }
       } else {
-        p_f2 = s.mhd;
+        pf2 = s.mhd;
         s1.mhd = nullptr;
       }
-      p_f1 = p_f2->pred;
-      s1.fp = p_f1;
-      chunk_type* c_f1 = chunk_of(p_f1);
-      if (c_f1 == chunk_of(p_f2)) {
-        incr_refcount(c_f1);
+      pf1 = pf2->pred;
+      s1.fp = pf1;
+      chunk_type* cf1 = chunk_of(pf1);
+      if (cf1 == chunk_of(pf2)) {
+        incr_refcount(cf1);
       }
-      if (chunk_of(s.sp) == c_f1) {
-        s1.sp = p_f2;
+      if (chunk_of(s.sp) == cf1) {
+        s1.sp = pf2;
       } else {
         s1.sp = nullptr;
       }
       s1.lp = s1.sp;
       s1.mtl = s1.mhd;
       s2 = s;
-      s2.mhd = p_f2;
-      p_f2->pred = nullptr;
-      if (p_f2->ext.clt == Call_link_async) {
-        p_f2->ext.pred = nullptr;
-      }
+      s2.mhd = pf2;
+      pf2->pred = nullptr;
+      pf2->ext.pred = nullptr;
+      s1 = update_back(s1, is_splittable_fn);
+      s2 = update_front(s2, is_splittable_fn);
       return std::make_pair(s1, s2);
     }
     
@@ -294,24 +349,29 @@ namespace cactus_stack {
                                                  const Is_splittable_fn& is_splittable_fn) {
       stack_type s1 = s;
       stack_type s2 = create_stack();
-      frame_header_type* p_f = s.mhd;
-      if (p_f == nullptr) {
+      frame_header_type* pf = s.mhd;
+      if (pf == nullptr) {
         return std::make_pair(s1, s2);
       }
-      frame_header_type* p_c = p_f->ext.succ;
-      if (p_c == nullptr) {
+      frame_header_type* pg = pf->ext.succ;
+      if (pg == nullptr) {
         return std::make_pair(s1, s2);
       }
-      p_c->pred = nullptr;
-      s1.fp = p_f;
-      s1.sp = (frame_header_type*)create_chunk(nullptr, nullptr);
-      s1.lp = (frame_header_type*)(((char*)s1.sp) + K);
+      pf->ext.succ = nullptr;
+      pg->ext.pred = nullptr;
+      pg->pred = nullptr;
+      s1.fp = pf;
+      s1.sp = nullptr;
+      s1.lp = nullptr;
+      s1.mtl = pf;
+      pf->ext.llt = Loop_link_none;
       s2 = s;
-      s2.mhd = ((p_c->ext.clt == Call_link_async) ||
-                (is_splittable_fn(frame_data(p_c)))) ? p_c : p_c->ext.succ;
-      if (s2.mhd == nullptr) {
-        s2.mtl = nullptr;
+      s2.mhd = pg;
+      if (s.mhd == s.mtl) {
+        s2.mtl = s2.mhd;
       }
+      s1 = update_back(s1, is_splittable_fn);
+      s2 = update_front(s2, is_splittable_fn);
       return std::make_pair(s1, s2);
     }
     

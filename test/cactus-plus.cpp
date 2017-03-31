@@ -221,14 +221,15 @@ namespace cactus_stack {
         case Trace_push_back: {
           auto plt = t->push_back.f.s.plt;
           auto plt_s = (plt == Parent_link_async ? "A" : "S");
-          out << "+[" << t->push_back.f.s.v << "](" << plt_s << ")" << std::endl;
+          frame& f = t->push_back.f;
+          out << "+{" << f.p.v << ", ty=" << plt_s << ", nb=" << f.p.nb_iters() << "}" << std::endl;
           if (t->push_back.k) {
             print_trace(out, t->push_back.k, prefix + (is_tail ? "    " : "│   "), true);
           }
           break;
         }
         case Trace_pop_back: {
-          out << "-[]" << std::endl;
+          out << "-{}" << std::endl;
           if (t->pop_back.k) {
             print_trace(out, t->pop_back.k, prefix + (is_tail ? "    " : "│   "), true);
           }
@@ -363,6 +364,8 @@ namespace cactus_stack {
         out << "TC-A{rs=" << tc.rs << ", ms=" << ms << "}" << std::endl;
       } else if (! equals(rmkd, ms_mf)) {
         out << "TC-F{rs=" << rmkd << ", ms=" << ms_mf << "}" << std::endl;
+        out << "TC-A{rs=" << tc.rs << ", ms=" << ms << "}" << std::endl;
+
       } else if (! equals(rmkd, ms_mb)) {
         out << "TC-B{rs=" << rmkd << ", ms=" << ms_mb << "}" << std::endl;
       } else {
@@ -482,13 +485,17 @@ namespace cactus_stack {
           if (tc_m.t.get() == nullptr) {
             return m;
           }
+          auto is_splittable_fn = [] (char* _fp) {
+            frame* fp = (frame*)_fp;
+            return is_splittable(fp->p);
+          };
           switch (tc_m.t->tag) {
             case Trace_fork_mark: {
               auto fr = fork_mark(tc_m.rs);
               switch (fr.tag) {
                 case Fork_result_fork:
                 case Fork_result_none: {
-                  auto mp = fork_mark(tc_m.ms);
+                  auto mp = fork_mark(tc_m.ms, is_splittable_fn);
                   reference_stack_type rs1, rs2;
                   n.tag = Machine_fork_mark;
                   if (fr.tag == Fork_result_fork) {
@@ -521,10 +528,6 @@ namespace cactus_stack {
                   thread_config_type& tc12 = n.split_mark.m12->thread;
                   thread_config_type& tc2 = n.split_mark.m2->thread;
                   thread_config_type& k = n.split_mark.k->thread;
-                  auto is_splittable_fn = [&] (char* _fp) {
-                    frame* fp = (frame*)_fp;
-                    return is_splittable(fp->p);
-                  };
                   auto ss = split_mark(tc_m.ms, is_splittable_fn);
                   stack_type s1 = ss.first;
                   stack_type s2 = ss.second;
@@ -561,6 +564,9 @@ namespace cactus_stack {
                     mf2->s.v = &(mf->s);
                     mf2->p = mf11->p.split(&(mf11->s), mf11->p.nb_iters() / 2);
                   }, is_splittable_fn);
+                  tc11.ms = update_front(tc11.ms, is_splittable_fn);
+                  tc12.ms = update_front(tc12.ms, is_splittable_fn);
+                  k.ms = update_front(k.ms, is_splittable_fn);
                   break;
                 }
                 default: {
@@ -588,6 +594,8 @@ namespace cactus_stack {
               tc_n.rs = tc_m.rs;
               tc_n.rs.pop_back();
               tc_n.ms = pop_back(tc_m.ms, [&] (char* p) {
+                return is_splittable(((frame*)p)->p);
+              }, [&] (char* p) {
                 ((frame*)(p))->~frame();
               });
               tc_n.t = tc_m.t->pop_back.k;
@@ -1065,11 +1073,11 @@ time_t xxx;
 
 int main(int argc, const char * argv[]) {
   xxx = time(nullptr);
-  //srand(1489590221);
-  srand((unsigned int)xxx);
+  srand(1490803734);
+  //srand((unsigned int)xxx);
   int nb_tests = (argc == 2) ? std::stoi(argv[1]) : 1024;
-  cactus_stack::plus::check_pairwise_compatible(nb_tests);
-  cactus_stack::plus::check_refcounts(nb_tests);
   cactus_stack::plus::check_consistency(nb_tests);
+  //cactus_stack::plus::check_pairwise_compatible(nb_tests);
+  //cactus_stack::plus::check_refcounts(nb_tests);
   return 0;
 }
