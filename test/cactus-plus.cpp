@@ -274,7 +274,8 @@ namespace cactus_stack {
           auto plt = t->push_back.f.s.plt;
           auto plt_s = (plt == Parent_link_async ? "A" : "S");
           frame& f = t->push_back.f;
-          out << "+{" << f.p.v << ", ty=" << plt_s << ", nb=" << f.p.nb_iters() << "}" << std::endl;
+          auto sv = (f.s.p != nullptr) ? f.s.p->v : f.s.v;
+          out << "+{p.v=" << f.p.v << ", s.v=" << sv << ", ty=" << plt_s << ", nb=" << f.p.nb_iters() << "}" << std::endl;
           if (t->push_back.k) {
             print_trace(out, t->push_back.k, prefix + (is_tail ? "    " : "│   "), true);
           }
@@ -598,12 +599,12 @@ namespace cactus_stack {
                   k.rs = fr.loop_split.s1;
                   k.rs.push_back(fr.loop_split.f);
                   frame& rf = k.rs.back();
-                  tc11.rs.push_back(frame());
+                  tc11.rs.push_back(frame(rf));
                   frame& rf11 = tc11.rs.back();
                   rf11.s.p = &(rf.s);
                   rf11.p = rf.p.split(&(rf.s), rf.p.nb_iters());
                   tc12.rs = fr.loop_split.s2;
-                  tc2.rs.push_back(frame());
+                  tc2.rs.push_back(frame(rf));
                   frame& rf2 = tc2.rs.back();
                   rf2.s.p = &(rf.s);
                   rf2.p = rf11.p.split(&(rf.s), rf11.p.nb_iters() / 2);
