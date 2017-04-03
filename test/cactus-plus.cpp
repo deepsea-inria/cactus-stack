@@ -48,8 +48,8 @@ namespace cactus_stack {
       
       private_frame split(shared_frame*, size_t nb) {
         private_frame p = *this;
-        p.lo += nb;
-        hi = p.lo;
+        lo += nb;
+        p.hi = lo;
         return p;
       }
       
@@ -595,9 +595,6 @@ namespace cactus_stack {
                   thread_config_type& tc12 = n.split_mark.m12->thread;
                   thread_config_type& tc2 = n.split_mark.m2->thread;
                   thread_config_type& k = n.split_mark.k->thread;
-                  auto ss = split_mark(tc_m.ms, is_splittable_fn);
-                  stack_type s1 = ss.first;
-                  stack_type s2 = ss.second;
                   k.rs = fr.loop_split.s1;
                   k.rs.push_back(fr.loop_split.f);
                   frame& rf = k.rs.back();
@@ -610,22 +607,28 @@ namespace cactus_stack {
                   frame& rf2 = tc2.rs.back();
                   rf2.s.p = &(rf.s);
                   rf2.p = rf11.p.split(&(rf.s), rf11.p.nb_iters() / 2);
+                  auto ss = split_mark(tc_m.ms, is_splittable_fn);
+                  stack_type s1 = ss.first;
+                  stack_type s2 = ss.second;
                   k.ms = s1;
                   frame* mf = nullptr;
                   shared_frame_type sft;
-                  peek_back(s1, [&] (shared_frame_type _sft, char* _fp) {
+                  call_link_type clt;
+                  peek_back(s1, [&] (shared_frame_type _sft, call_link_type _clt, char* _fp) {
                     mf = (frame*)_fp;
                     sft = _sft;
+                    clt = _clt;
                   });
+                  parent_link_type plt = ((clt == Call_link_async) ? Parent_link_async : Parent_link_sync);
                   frame* mf11 = nullptr;
-                  tc11.ms = create_stack<sizeof(frame)>([&] (char* _fp) {
+                  tc11.ms = create_stack<sizeof(frame)>(plt, [&] (char* _fp) {
                     mf11 = (frame*)_fp;
                     new (mf11) frame;
                     mf11->s.p = &(mf->s);
                     mf11->p = mf->p.split(&(mf11->s), mf->p.nb_iters());
                   }, is_splittable_fn);
                   tc12.ms = s2;
-                  tc2.ms = create_stack<sizeof(frame)>([&] (char* _fp) {
+                  tc2.ms = create_stack<sizeof(frame)>(plt, [&] (char* _fp) {
                     frame* mf2 = (frame*)_fp;
                     new (mf2) frame;
                     mf2->s.p = &(mf->s);
@@ -1156,8 +1159,8 @@ time_t xxx;
 
 int main(int argc, const char * argv[]) {
   xxx = time(nullptr);
-  //srand(1490803734);
-  srand((unsigned int)xxx);
+  srand(1491220989);
+  //srand((unsigned int)xxx);
   int nb_tests = (argc == 2) ? std::stoi(argv[1]) : 1024;
   cactus_stack::plus::check_consistency(nb_tests);
   //cactus_stack::plus::check_pairwise_compatible(nb_tests);

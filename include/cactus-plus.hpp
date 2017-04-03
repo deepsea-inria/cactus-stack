@@ -168,7 +168,7 @@ namespace cactus_stack {
     template <class Read_fn>
     void peek_back(stack_type s, const Read_fn& read_fn) {
       assert(! empty(s));
-      read_fn(s.fp->ext.sft, frame_data(s.fp));
+      read_fn(s.fp->ext.sft, s.fp->ext.clt, frame_data(s.fp));
     }
     
     template <class Read_fn>
@@ -378,10 +378,11 @@ namespace cactus_stack {
     }
     
     template <int frame_szb, class Initialize_fn, class Is_splittable_fn>
-    stack_type create_stack(const Initialize_fn& initialize_fn,
+    stack_type create_stack(parent_link_type ty,
+                            const Initialize_fn& initialize_fn,
                             const Is_splittable_fn& is_splittable_fn) {
       stack_type s = create_stack();
-      s = push_back<frame_szb>(s, Parent_link_sync, initialize_fn, is_splittable_fn);
+      s = push_back<frame_szb>(s, ty, initialize_fn, is_splittable_fn);
       s.fp->ext.sft = Shared_frame_indirect;
       return s;
     }
