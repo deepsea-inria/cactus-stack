@@ -635,9 +635,9 @@ namespace cactus_stack {
                     mf2->s.p = &(mf->s);
                     mf2->p = mf11->p.split(&(mf11->s), mf11->p.nb_iters() / 2);
                   }, is_splittable_fn);
-                  tc11.ms = update_front(tc11.ms, is_splittable_fn);
-                  tc12.ms = update_front(tc12.ms, is_splittable_fn);
-                  k.ms = update_front(k.ms, is_splittable_fn);
+                  tc11.ms = update_marks_fwd(tc11.ms, is_splittable_fn);
+                  tc12.ms = update_marks_fwd(tc12.ms, is_splittable_fn);
+                  k.ms = update_marks_fwd(k.ms, is_splittable_fn);
                   tc11.t = tc_m.t->split_mark.k11;
                   tc12.t = tc_m.t->split_mark.k12;
                   tc2.t = tc_m.t->split_mark.k2;

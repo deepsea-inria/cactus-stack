@@ -182,7 +182,7 @@ namespace cactus_stack {
     };
     
     template <class Is_splittable_fn>
-    stack_type update_back(stack_type s, const Is_splittable_fn& is_splittable_fn) {
+    stack_type update_marks_bkw(stack_type s, const Is_splittable_fn& is_splittable_fn) {
       stack_type t = s;
       if (t.mtl == nullptr) {
         return t;
@@ -205,7 +205,7 @@ namespace cactus_stack {
     }
     
     template <class Is_splittable_fn>
-    stack_type update_front(stack_type s, const Is_splittable_fn& is_splittable_fn) {
+    stack_type update_marks_fwd(stack_type s, const Is_splittable_fn& is_splittable_fn) {
       stack_type t = s;
       if (t.mhd == nullptr) {
         return t;
@@ -300,7 +300,7 @@ namespace cactus_stack {
         t.lp = cfp->hdr.lp;
         decr_refcount(cfp);
       }
-      return update_back(t, is_splittable_fn);
+      return update_marks_bkw(t, is_splittable_fn);
     }
     
     template <class Is_splittable_fn>
@@ -341,8 +341,8 @@ namespace cactus_stack {
       s2.mhd = pf2;
       pf2->pred = nullptr;
       pf2->ext.pred = nullptr;
-      s1 = update_back(s1, is_splittable_fn);
-      s2 = update_front(s2, is_splittable_fn);
+      s1 = update_marks_bkw(s1, is_splittable_fn);
+      s2 = update_marks_fwd(s2, is_splittable_fn);
       return std::make_pair(s1, s2);
     }
     
@@ -373,8 +373,8 @@ namespace cactus_stack {
       if (s.mhd == s.mtl) {
         s2.mtl = s2.mhd;
       }
-      s1 = update_back(s1, is_splittable_fn);
-      s2 = update_front(s2, is_splittable_fn);
+      s1 = update_marks_bkw(s1, is_splittable_fn);
+      s2 = update_marks_fwd(s2, is_splittable_fn);
       chunk_type* cpf = chunk_of(pf);
       if (cpf == chunk_of(pg)) {
         incr_refcount(cpf);
