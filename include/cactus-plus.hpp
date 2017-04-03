@@ -359,6 +359,7 @@ namespace cactus_stack {
       if (pg == nullptr) {
         return std::make_pair(s1, s2);
       }
+      assert(pg->pred == pf);
       pf->ext.succ = nullptr;
       pg->ext.pred = nullptr;
       pg->pred = nullptr;
@@ -374,6 +375,10 @@ namespace cactus_stack {
       }
       s1 = update_back(s1, is_splittable_fn);
       s2 = update_front(s2, is_splittable_fn);
+      chunk_type* cpf = chunk_of(pf);
+      if (cpf == chunk_of(pg)) {
+        incr_refcount(cpf);
+      }
       return std::make_pair(s1, s2);
     }
     

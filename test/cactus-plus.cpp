@@ -1163,7 +1163,8 @@ int main(int argc, const char * argv[]) {
   srand(1491220989);
   //srand((unsigned int)xxx);
   int nb_tests = (argc == 2) ? std::stoi(argv[1]) : 1024;
-  cactus_stack::plus::check_consistency(nb_tests);
+  cactus_stack::plus::check_refcounts(nb_tests);
+//  cactus_stack::plus::check_consistency(nb_tests);
   //cactus_stack::plus::check_pairwise_compatible(nb_tests);
   //cactus_stack::plus::check_refcounts(nb_tests);
   return 0;
