@@ -127,7 +127,7 @@ namespace cactus_stack {
       } loop_split;
     };
     
-    std::pair<fork_result_tag, size_t> fork_mark_status(const reference_stack_type& s) {
+    std::pair<fork_result_tag, size_t> fork_mark_info(const reference_stack_type& s) {
       static constexpr
       size_t not_found = -1;
       auto index_of_topmost_marked = [&] {
@@ -154,7 +154,7 @@ namespace cactus_stack {
     
     fork_result_type fork_mark(reference_stack_type& s) {
       fork_result_type r;
-      auto _p = fork_mark_status(s);
+      auto _p = fork_mark_info(s);
       r.tag = _p.first;
       if (r.tag == Fork_result_none) {
         return r;
@@ -307,7 +307,7 @@ namespace cactus_stack {
       if (np == 0) {
         return r;
       }
-      auto _p = fork_mark_status(prefix);
+      auto _p = fork_mark_info(prefix);
       fork_result_tag ft = _p.first;
       size_t k = _p.second;
       if ((ft == Fork_result_fork) && (quickcheck::generateInRange(0, d - 1) == 0)) {
@@ -321,6 +321,7 @@ namespace cactus_stack {
         r = mk_split_mark();
         auto pk = prefix.begin() + (k + 1);
         std::deque<frame> prefix1(prefix.begin(), pk);
+        prefix1.pop_back();
         std::deque<frame> prefix2(pk, prefix.end());
         r->split_mark.k11 = gen_random_trace({ }, d + 1);
         r->split_mark.k12 = gen_random_trace(prefix2, d + 1);
@@ -583,11 +584,6 @@ namespace cactus_stack {
             case Trace_split_mark: {
               auto fr = fork_mark(tc_m.rs);
               switch (fr.tag) {
-                case Fork_result_fork: {
-                  assert(false);
-                  break;
-                }
-                case Fork_result_none:
                 case Fork_result_loop_split: {
                   n.tag = Machine_split_mark;
                   n.split_mark.m11 = mk_mc_thread();
@@ -615,13 +611,13 @@ namespace cactus_stack {
                   frame& rf = k.rs.back();
                   tc11.rs.push_back(frame(rf));
                   frame& rf11 = tc11.rs.back();
-                  rf11.s.p = &(rf.s);
-                  rf11.p = rf.p.split(&(rf.s), rf.p.nb_iters());
+                  rf11.s.p = nullptr;
+                  rf11.p = rf.p.split(nullptr, rf.p.nb_iters());
                   tc12.rs = fr.loop_split.s2;
                   tc2.rs.push_back(frame(rf));
                   frame& rf2 = tc2.rs.back();
-                  rf2.s.p = &(rf.s);
-                  rf2.p = rf11.p.split(&(rf.s), rf11.p.nb_iters() / 2);
+                  rf2.s.p = nullptr;
+                  rf2.p = rf11.p.split(nullptr, rf11.p.nb_iters() / 2);
                   auto ss = split_mark(tc_m.ms, is_splittable_fn);
                   stack_type s1 = ss.first;
                   stack_type s2 = ss.second;
@@ -651,6 +647,14 @@ namespace cactus_stack {
                   tc11.ms = update_marks_fwd(tc11.ms, is_splittable_fn);
                   tc12.ms = update_marks_fwd(tc12.ms, is_splittable_fn);
                   k.ms = update_marks_fwd(k.ms, is_splittable_fn);
+                  break;
+                }
+                case Fork_result_fork: {
+                  assert(false);
+                  break;
+                }
+                case Fork_result_none: {
+                  assert(false);
                   break;
                 }
                 default: {
@@ -786,16 +790,13 @@ namespace cactus_stack {
     }
     
     bool equals(frame f1, frame f2) {
-      if (f1.p.v != f2.p.v) {
-        return false;
-      }
-      if (f1.s.p == nullptr) {
-        if (f2.s.p != nullptr) {
-          return false;
+      auto resolv = [&] (frame& f) {
+        if (f.s.p != nullptr) {
+          return f.s.p->v;
         }
-        return (f1.s.v == f2.s.v);
-      }
-      return f1.s.p->v == f2.s.p->v;
+        return f.s.v;
+      };
+      return resolv(f1) == resolv(f2);
     }
     
     bool equals(const reference_stack_type& fs1,
@@ -1107,10 +1108,7 @@ namespace cactus_stack {
       
       bool holdsFor(const machine_config_type& _mc) {
         auto mc = std::make_shared<machine_config_type>(_mc);
-        print_trace(std::cout, mc->thread.t);
         while (! is_finished(mc)) {
-          print_machine_config(std::cout, *mc);
-
           if (! is_memory_safe(mc)) {
             std::cout << "Extraction of stacks from bogus thread configuration:" << std::endl;
             print_machine_config(std::cout, *mc);
@@ -1170,10 +1168,11 @@ time_t xxx;
 
 int main(int argc, const char * argv[]) {
   xxx = time(nullptr);
-  srand(1491321946);
+  srand(1491780537); //1491780430  1491780537
   //srand((unsigned int)xxx);
   int nb_tests = (argc == 2) ? std::stoi(argv[1]) : 1024;
-  cactus_stack::plus::check_refcounts(nb_tests);
+  cactus_stack::plus::check_consistency(nb_tests);
+//  cactus_stack::plus::check_refcounts(nb_tests);
 //  cactus_stack::plus::check_consistency(nb_tests);
   //cactus_stack::plus::check_pairwise_compatible(nb_tests);
   //cactus_stack::plus::check_refcounts(nb_tests);
