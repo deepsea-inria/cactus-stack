@@ -21,10 +21,6 @@
 namespace cactus_stack {
   namespace plus {
     
-    bool flip_coin() {
-      return quickcheck::generateInRange(0, 1);
-    }
-    
     /*------------------------------*/
     /* Frame */
     
@@ -61,6 +57,10 @@ namespace cactus_stack {
       shared_frame s;
     };
     
+    bool flip_coin() {
+      return quickcheck::generateInRange(0, 1);
+    }
+    
     frame gen_random_frame() {
       static constexpr
       int max_val = 1024;
@@ -76,7 +76,7 @@ namespace cactus_stack {
     
     std::ostream& operator<<(std::ostream& out, const frame& f) {
       auto ty_s = (f.s.plt == Parent_link_async) ? "A" : "S";
-      auto sv = (f.s.p == nullptr) ? "null" : std::to_string(f.s.p->v);
+      auto sv = std::to_string((f.s.p == nullptr) ? f.s.v : f.s.p->v);
       out << "{s.v=" << sv << ", p.v=" << f.p.v <<
       ", ty=" << ty_s << ", nb=" << f.p.nb_iters() << "}";
       return out;
