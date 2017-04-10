@@ -739,12 +739,19 @@ namespace cactus_stack {
       return r;
     }
     
+    frame copy_out(frame_header_type* fp) {
+      frame f = *(frame_data<frame>(fp));
+      if (f.s.p != nullptr) {
+        assert(f.s.v == f.s.p->v);
+      }
+      return f;
+    }
+    
     reference_stack_type all_frames(frame_header_type* fp,
                                     frame_header_type* sp) {
       reference_stack_type r;
       for (auto p : all_frame_ptrs(fp, sp)) {
-        frame f = *(frame_data<frame>(p));
-        r.push_back(f);
+        r.push_back(copy_out(p));
       }
       return r;
     }
@@ -764,7 +771,7 @@ namespace cactus_stack {
     reference_stack_type marked_frames_fwd(frame_header_type* mhd) {
       reference_stack_type r;
       for (auto p : marked_frame_ptrs_fwd(mhd)) {
-        r.push_back(*(frame_data<frame>(p)));
+        r.push_back(copy_out(p));
       }
       return r;
     }
@@ -784,19 +791,29 @@ namespace cactus_stack {
     reference_stack_type marked_frames_bkw(frame_header_type* mtl) {
       reference_stack_type r;
       for (auto p : marked_frame_ptrs_bkw(mtl)) {
-        r.push_back(*(frame_data<frame>(p)));
+        r.push_back(copy_out(p));
       }
       return r;
     }
     
-    bool equals(frame f1, frame f2) {
-      auto resolv = [&] (frame& f) {
-        if (f.s.p != nullptr) {
-          return f.s.p->v;
-        }
-        return f.s.v;
-      };
-      return resolv(f1) == resolv(f2);
+    bool operator==(frame f1, frame f2) {
+      if (f1.p.v != f2.p.v) {
+        return false;
+      }
+      if (f1.p.nb_iters() != f2.p.nb_iters()) {
+        return false;
+      }
+      if (f1.s.plt != f2.s.plt) {
+        return false;
+      }
+      if (f1.s.v != f2.s.v) {
+        return false;
+      }
+      return true;
+    }
+    
+    bool operator!=(frame f1, frame f2) {
+      return ! (f1 == f2);
     }
     
     bool equals(const reference_stack_type& fs1,
@@ -806,7 +823,7 @@ namespace cactus_stack {
         return false;
       }
       for (size_t i = 0; i < n; i++) {
-        if (! equals(fs1[i], fs2[i])) {
+        if (fs1[i] != fs2[i]) {
           return false;
         }
       }
