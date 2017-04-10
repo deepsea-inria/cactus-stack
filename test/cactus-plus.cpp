@@ -633,14 +633,14 @@ namespace cactus_stack {
                   frame* mf11 = nullptr;
                   tc11.ms = create_stack<sizeof(frame)>(plt, [&] (char* _fp) {
                     mf11 = (frame*)_fp;
-                    new (mf11) frame;
+                    new (mf11) frame(*mf);
                     mf11->s.p = &(mf->s);
                     mf11->p = mf->p.split(&(mf11->s), mf->p.nb_iters());
                   }, is_splittable_fn);
                   tc12.ms = s2;
                   tc2.ms = create_stack<sizeof(frame)>(plt, [&] (char* _fp) {
                     frame* mf2 = (frame*)_fp;
-                    new (mf2) frame;
+                    new (mf2) frame(*mf);
                     mf2->s.p = &(mf->s);
                     mf2->p = mf11->p.split(&(mf11->s), mf11->p.nb_iters() / 2);
                   }, is_splittable_fn);
@@ -740,11 +740,7 @@ namespace cactus_stack {
     }
     
     frame copy_out(frame_header_type* fp) {
-      frame f = *(frame_data<frame>(fp));
-      if (f.s.p != nullptr) {
-        assert(f.s.v == f.s.p->v);
-      }
-      return f;
+      return *(frame_data<frame>(fp));
     }
     
     reference_stack_type all_frames(frame_header_type* fp,
@@ -1018,7 +1014,7 @@ namespace cactus_stack {
           break;
         }
         case Machine_stuck: {
-//          assert(false);
+          assert(false);
           break;
         }
         default: {
@@ -1185,13 +1181,11 @@ time_t xxx;
 
 int main(int argc, const char * argv[]) {
   xxx = time(nullptr);
-  srand(1491780537); //1491780430  1491780537
-  //srand((unsigned int)xxx);
+  //srand(1491780537);
+  srand((unsigned int)xxx);
   int nb_tests = (argc == 2) ? std::stoi(argv[1]) : 1024;
+  cactus_stack::plus::check_refcounts(nb_tests);
+  cactus_stack::plus::check_pairwise_compatible(nb_tests);
   cactus_stack::plus::check_consistency(nb_tests);
-//  cactus_stack::plus::check_refcounts(nb_tests);
-//  cactus_stack::plus::check_consistency(nb_tests);
-  //cactus_stack::plus::check_pairwise_compatible(nb_tests);
-  //cactus_stack::plus::check_refcounts(nb_tests);
   return 0;
 }
