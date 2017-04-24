@@ -161,7 +161,7 @@ namespace cactus_stack {
       };
     }
     
-    bool empty_stack(stack_type s) {
+    bool empty(stack_type s) {
       return s.fp == nullptr;
     }
 
@@ -171,7 +171,7 @@ namespace cactus_stack {
     
     template <class Read_fn>
     void peek_back(stack_type s, const Read_fn& read_fn) {
-      assert(! empty_stack(s));
+      assert(! empty(s));
       read_fn(s.fp->ext.sft, s.fp->ext.clt, frame_data(s.fp));
     }
     
