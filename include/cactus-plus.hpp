@@ -161,19 +161,23 @@ namespace cactus_stack {
       };
     }
     
-    bool empty(stack_type s) {
+    bool empty_stack(stack_type s) {
       return s.fp == nullptr;
+    }
+
+    bool empty_mark(stack_type s) {
+      return s.mhd == nullptr;
     }
     
     template <class Read_fn>
     void peek_back(stack_type s, const Read_fn& read_fn) {
-      assert(! empty(s));
+      assert(! empty_stack(s));
       read_fn(s.fp->ext.sft, s.fp->ext.clt, frame_data(s.fp));
     }
     
     template <class Read_fn>
     void peek_mark(stack_type s, const Read_fn& read_fn) {
-      assert(s.mhd != nullptr);
+      assert(! empty_mark(s));
       read_fn(s.mhd->ext.sft, s.mhd->ext.clt, s.mhd->pred, frame_data(s.mhd));
     }
     
@@ -308,7 +312,7 @@ namespace cactus_stack {
                                                 const Is_splittable_fn& is_splittable_fn) {
       stack_type s1 = s;
       stack_type s2 = create_stack();
-      if (s.mhd == nullptr) {
+      if (empty_mark(s)) {
         return std::make_pair(s1, s2);
       }
       frame_header_type* pf1, * pf2;
