@@ -178,12 +178,14 @@ namespace cactus_stack {
     template <class Read_fn>
     void peek_mark(stack_type s, const Read_fn& read_fn) {
       assert(! empty_mark(s));
-      read_fn(s.mhd->ext.sft, s.mhd->ext.clt, s.mhd->pred, frame_data(s.mhd));
+      auto sft = s.mhd->ext.sft;
+      auto clt = s.mhd->ext.clt;
+      auto _ar = frame_data(s.mhd);
+      auto pred = s.mhd->pred;
+      auto pred_sft = (pred == nullptr) ? Shared_frame_direct : pred->ext.sft;
+      auto _pred_ar = (pred == nullptr) ? nullptr : frame_data(pred);
+      read_fn(sft, clt, _ar, pred_sft, _pred_ar);
     }
-    
-    using parent_link_type = enum {
-      Parent_link_async, Parent_link_sync
-    };
     
     template <class Is_splittable_fn>
     stack_type update_marks_bkw(stack_type s, const Is_splittable_fn& is_splittable_fn) {
@@ -232,6 +234,10 @@ namespace cactus_stack {
       }
       return t;
     }
+    
+    using parent_link_type = enum {
+      Parent_link_async, Parent_link_sync
+    };
     
     template <int frame_szb, class Initialize_fn, class Is_splittable_fn>
     stack_type push_back(stack_type s,
