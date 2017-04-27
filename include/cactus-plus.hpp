@@ -235,6 +235,11 @@ namespace cactus_stack {
       return t;
     }
     
+    template <class Is_splittable_fn>
+    stack_type update_marks(stack_type s, const Is_splittable_fn& is_splittable_fn) {
+      return update_marks_fwd(update_marks_bkw(s, is_splittable_fn), is_splittable_fn);
+    }
+    
     using parent_link_type = enum {
       Parent_link_async, Parent_link_sync
     };
@@ -287,7 +292,7 @@ namespace cactus_stack {
                         const Is_splittable_fn& is_splittable_fn,
                         const Destruct_fn& destruct_fn) {
       stack_type t = s;
-      destruct_fn(frame_data(s.fp));
+      destruct_fn(frame_data(s.fp), s.fp->ext.sft);
       bool is_splittable_sfp = is_splittable_fn(frame_data(s.fp));
       bool is_async_sfp = (s.fp->ext.clt == Call_link_async);
       bool is_loop_child_sfp = (s.fp->ext.llt == Loop_link_child);
