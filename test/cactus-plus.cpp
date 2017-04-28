@@ -644,9 +644,8 @@ namespace cactus_stack {
                     mf2->s.p = &(mf->s);
                     mf2->p = mf11->p.split(&(mf11->s), mf11->p.nb_iters() / 2);
                   }, is_splittable_fn);
-                  tc11.ms = update_marks_fwd(tc11.ms, is_splittable_fn);
-                  tc12.ms = update_marks_fwd(tc12.ms, is_splittable_fn);
-                  k.ms = update_marks_fwd(k.ms, is_splittable_fn);
+                  tc12.ms = update_mark_stack_after_split(tc12.ms, is_splittable_fn);
+                  k.ms = update_mark_stack_after_split(k.ms, is_splittable_fn);
                   break;
                 }
                 case Fork_result_fork: {
@@ -674,6 +673,10 @@ namespace cactus_stack {
                 frame* fp = (frame*)_fp;
                 return is_splittable(fp->p);
               });
+              tc_n.ms = push_mark_back_if_splittable(tc_n.ms, [&] (char* _fp) {
+                frame* fp = (frame*)_fp;
+                return is_splittable(fp->p);
+              });
               tc_n.t = tc_m.t->push_back.k;
               break;
             }
@@ -682,9 +685,7 @@ namespace cactus_stack {
               tc_n.rs = tc_m.rs;
               assert(! tc_n.rs.empty());
               tc_n.rs.pop_back();
-              tc_n.ms = pop_back(tc_m.ms, [&] (char* p) {
-                return is_splittable(((frame*)p)->p);
-              }, [&] (char* p) {
+              tc_n.ms = pop_back(tc_m.ms, [&] (char* p, shared_frame_type) {
                 ((frame*)(p))->~frame();
               });
               tc_n.t = tc_m.t->pop_back.k;
@@ -1184,8 +1185,8 @@ int main(int argc, const char * argv[]) {
   //srand(1491780537);
   srand((unsigned int)xxx);
   int nb_tests = (argc == 2) ? std::stoi(argv[1]) : 1024;
-  cactus_stack::plus::check_refcounts(nb_tests);
-  cactus_stack::plus::check_pairwise_compatible(nb_tests);
   cactus_stack::plus::check_consistency(nb_tests);
+  cactus_stack::plus::check_pairwise_compatible(nb_tests);
+  cactus_stack::plus::check_refcounts(nb_tests);
   return 0;
 }
