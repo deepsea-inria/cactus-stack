@@ -266,7 +266,7 @@ namespace cactus_stack {
     stack_type update_mark_stack_after_loop_iters(stack_type s, const Is_splittable_fn& is_splittable_fn) {
       stack_type t = s;
       t = push_mark_back_if_splittable(t, is_splittable_fn);
-      t = pop_mark_back_if_not_splittable(s, is_splittable_fn);
+      t = pop_mark_back_if_not_splittable(t, is_splittable_fn);
       return t;
     }
     
