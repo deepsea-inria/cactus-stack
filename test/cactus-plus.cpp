@@ -644,8 +644,8 @@ namespace cactus_stack {
                     mf2->s.p = &(mf->s);
                     mf2->p = mf11->p.split(&(mf11->s), mf11->p.nb_iters() / 2);
                   }, is_splittable_fn);
-                  tc12.ms = update_mark_stack_after_split(tc12.ms, is_splittable_fn);
-                  k.ms = update_mark_stack_after_split(k.ms, is_splittable_fn);
+                  tc12.ms = update_mark_stack(tc12.ms, is_splittable_fn);
+                  k.ms = update_mark_stack(k.ms, is_splittable_fn);
                   break;
                 }
                 case Fork_result_fork: {
@@ -670,10 +670,6 @@ namespace cactus_stack {
               tc_n.ms = push_back<sizeof(frame)>(tc_m.ms, f.s.plt, [&] (char* p) {
                 new ((frame*)p) frame(f);
               }, [&] (char* _fp) {
-                frame* fp = (frame*)_fp;
-                return is_splittable(fp->p);
-              });
-              tc_n.ms = push_mark_back_if_splittable(tc_n.ms, [&] (char* _fp) {
                 frame* fp = (frame*)_fp;
                 return is_splittable(fp->p);
               });
@@ -1096,8 +1092,8 @@ namespace cactus_stack {
     
     /*------------------------------*/
     /* Quickcheck properties */
-    
-    class property_consitent_machine_config
+        
+    class property_consistent_machine_config
     : public quickcheck::Property<machine_config_type> {
     public:
       
@@ -1158,7 +1154,7 @@ namespace cactus_stack {
     /*------------------------------*/
     
     void check_consistency(int nb_tests) {
-      using prop = property_consitent_machine_config;
+      using prop = property_consistent_machine_config;
       auto msg = "cactus stack is consistent with the spec";
       quickcheck::check<prop>(msg, nb_tests);
     }
@@ -1182,7 +1178,7 @@ time_t xxx;
 
 int main(int argc, const char * argv[]) {
   xxx = time(nullptr);
-  //srand(1491780537);
+  //srand(1493651783);
   srand((unsigned int)xxx);
   int nb_tests = (argc == 2) ? std::stoi(argv[1]) : 1024;
   cactus_stack::plus::check_consistency(nb_tests);
