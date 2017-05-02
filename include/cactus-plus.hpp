@@ -283,8 +283,8 @@ namespace cactus_stack {
       if (empty(t)) {
         return t;
       }
-      t = try_push_mark_back(t, t.fp, is_splittable_fn);
       t = try_pop_mark_back(t, is_splittable_fn);
+      t = try_push_mark_back(t, t.fp, is_splittable_fn);
       t = try_pop_mark_front(t, is_splittable_fn);
       return t;
     }
