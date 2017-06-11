@@ -278,14 +278,45 @@ namespace cactus_stack {
     }
     
     template <class Is_splittable_fn>
+    stack_type collect_mark_stack(stack_type s, const Is_splittable_fn& is_splittable_fn) {
+      stack_type t = s;
+      frame_header_type* mhd = s.mhd;
+      while (mhd != nullptr) {
+        if (is_splittable_fn(frame_data(mhd))) {
+          break;
+        }
+        if ((mhd->ext.clt == Call_link_async) && (mhd->pred != nullptr)) {
+          break;
+        }
+        // delete mhd from mark stack
+        auto succ = mhd->ext.succ;
+        if (succ != nullptr) {
+          succ->ext.pred = nullptr;
+        }
+        mhd = succ;
+      }
+      if (mhd == nullptr) {
+        t.mtl = mhd;
+      }
+      t.mhd = mhd;
+      return t;
+    }
+    
+    template <class Is_splittable_fn>
     stack_type update_mark_stack(stack_type s, const Is_splittable_fn& is_splittable_fn) {
       stack_type t = s;
       if (empty(t)) {
         return t;
       }
       t = try_pop_mark_back(t, is_splittable_fn);
-      t = try_push_mark_back(t, t.fp, is_splittable_fn);
       t = try_pop_mark_front(t, is_splittable_fn);
+      t = collect_mark_stack(t, is_splittable_fn);
+      if (s.mtl == t.fp) {
+        return t;
+      }
+      if (is_splittable_fn(frame_data(t.fp))) {
+        t = push_mark_back(t, t.fp);
+      }
       return t;
     }
     

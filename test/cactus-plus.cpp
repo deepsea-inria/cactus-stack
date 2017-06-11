@@ -835,9 +835,20 @@ namespace cactus_stack {
     }
     
     reference_stack_type marked_frames_of(const reference_stack_type& d) {
-      return filter([] (frame& f) {
-        return is_marked(f);
-      }, d);
+      auto e = d;
+      reference_stack_type f;
+      bool b = false;
+      while (! e.empty()) {
+        auto& hd = e.front();
+        if (is_splittable(hd.p)) {
+          f.push_back(hd);
+        } else if ((hd.s.plt == Parent_link_async) && b) {
+          f.push_back(hd);
+        }
+        e.pop_front();
+        b = true;
+      }
+      return f;
     }
     
     std::set<chunk_type*> chunks_of_stack(stack_type s) {
@@ -947,6 +958,10 @@ namespace cactus_stack {
     bool is_consistent(thread_config_type& tc) {
       bool r = true;
       auto af_r = tc.rs;
+      tc.ms = update_mark_stack(tc.ms, [] (char* _fp) {
+        frame* fp = (frame*)_fp;
+        return is_splittable(fp->p);
+      });
       auto af_m = all_frames(tc.ms.fp, tc.ms.sp);
       r = r && equals(af_r, af_m);
       auto mf_r = marked_frames_of(tc.rs);
@@ -1092,7 +1107,7 @@ namespace cactus_stack {
     
     /*------------------------------*/
     /* Quickcheck properties */
-        
+    
     class property_consistent_machine_config
     : public quickcheck::Property<machine_config_type> {
     public:
