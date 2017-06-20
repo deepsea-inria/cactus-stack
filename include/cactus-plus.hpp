@@ -230,11 +230,13 @@ namespace cactus_stack {
     stack_type pop_mark_back(stack_type s) {
       assert(! empty_mark(s));
       stack_type t = s;
-      frame_header_type* pred = t.mtl->ext.pred;
+      frame_header_type* succ = t.mtl;
+      frame_header_type* pred = succ->ext.pred;
       if (pred == nullptr) {
         t.mhd = nullptr;
       } else {
         pred->ext.succ = nullptr;
+        succ->ext.pred = nullptr;
       }
       t.mtl = pred;
       return t;
@@ -255,11 +257,13 @@ namespace cactus_stack {
     stack_type pop_mark_front(stack_type s) {
       assert(! empty_mark(s));
       stack_type t = s;
-      frame_header_type* succ = t.mhd->ext.succ;
+      frame_header_type* pred = t.mhd;
+      frame_header_type* succ = pred->ext.succ;
       if (succ == nullptr) {
         t.mtl = nullptr;
       } else {
         succ->ext.pred = nullptr;
+        pred->ext.succ = nullptr;
       }
       t.mhd = succ;
       return t;
@@ -292,6 +296,7 @@ namespace cactus_stack {
         auto succ = mhd->ext.succ;
         if (succ != nullptr) {
           succ->ext.pred = nullptr;
+          mhd->ext.succ = nullptr;
         }
         mhd = succ;
       }
@@ -314,6 +319,7 @@ namespace cactus_stack {
       if (s.mtl == t.fp) {
         return t;
       }
+      
       if (is_splittable_fn(frame_data(t.fp))) {
         t = push_mark_back(t, t.fp);
       }
@@ -406,6 +412,7 @@ namespace cactus_stack {
       s1.mtl = s1.mhd;
       s2 = s;
       s2.mhd = pf2;
+      pf1->ext.succ = nullptr;
       pf2->pred = nullptr;
       pf2->ext.pred = nullptr;
       s1 = try_pop_mark_back(s1, is_splittable_fn);
@@ -425,6 +432,7 @@ namespace cactus_stack {
       if (pg == nullptr) {
         return std::make_pair(s1, s2);
       }
+      assert(pg->ext.llt == Loop_link_child);
       assert(pg->pred == pf);
       pf->ext.succ = nullptr;
       pg->ext.pred = nullptr;
@@ -434,7 +442,6 @@ namespace cactus_stack {
       s1.lp = nullptr;
       s1.mtl = pf;
       s2 = s;
-      assert(pg->ext.llt == Loop_link_child);
       pg->ext.llt = Loop_link_none;
       s2.mhd = pg;
       chunk_type* cpf = chunk_of(pf);
