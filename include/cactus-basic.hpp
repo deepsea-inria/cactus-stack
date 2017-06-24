@@ -268,6 +268,7 @@ namespace cactus_stack {
       s1.mtl = s1.mhd;
       s2 = s;
       s2.mhd = pf2;
+      pf1->ext.succ = nullptr;
       pf2->pred = nullptr;
       pf2->ext.pred = nullptr;
       return std::make_pair(s1, s2);
