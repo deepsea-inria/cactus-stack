@@ -149,13 +149,83 @@ namespace cactus_stack {
     } // end namespace
     
     /*------------------------------*/
+    /* Stack-frame iterator */
+
+    class iterator {
+    private:
+
+      frame_header_type* fp;
+      
+    public:
+      
+      using self_type = iterator;
+      
+      using value_type = frame_header_type;
+
+      using reference = value_type&;
+
+      using pointer = value_type*;
+
+      using difference_type = int;
+
+      using iterator_category = std::forward_iterator_tag;
+      
+      iterator (frame_header_type* fp)
+        : fp(fp) { }
+      
+      self_type operator++() {
+        self_type i = *this;
+        assert(fp != nullptr);
+        fp = fp->pred;
+        return i;
+      }
+      
+      self_type operator++(int junk) {
+        assert(fp != nullptr);
+        fp = fp->pred;
+        return *this;
+      }
+      
+      reference operator*() {
+        return *fp;
+      }
+      
+      pointer operator->() {
+        return fp;
+      }
+      
+      bool operator==(const self_type& rhs) {
+        return fp == rhs.fp;
+      }
+      
+      bool operator!=(const self_type& rhs) {
+        return fp != rhs.fp;
+      }
+
+    };
+
+    /* Stack-frame iterator */
+    /*------------------------------*/
+
+    /*------------------------------*/
     /* Stack */
-    
-    using stack_type = struct {
+
+    class stack_type {
+    public:
+
       frame_header_type* fp, * sp, * lp;
       frame_header_type* mhd, * mtl;
+
+      iterator begin() {
+        return iterator(fp);
+      }
+
+      iterator end() {
+        return iterator(nullptr);
+      }
+      
     };
-    
+        
     bool empty(stack_type s) {
       return s.fp == nullptr;
     }
@@ -470,77 +540,6 @@ namespace cactus_stack {
     }
     
     /* Stack */
-    /*------------------------------*/
-
-    /*------------------------------*/
-    /* Iterators */
-
-    class iterator {
-    private:
-
-      frame_header_type* fp;
-      
-    public:
-      
-      using self_type = iterator;
-      
-      using value_type = frame_header_type;
-
-      using reference = value_type&;
-
-      using pointer = value_type*;
-
-      using difference_type = int;
-
-      using iterator_category = std::forward_iterator_tag;
-      
-      iterator (frame_header_type* fp)
-        : fp(fp) { }
-      
-      self_type operator++() {
-        self_type i = *this;
-        assert(fp != nullptr);
-        fp = fp->pred;
-        return i;
-      }
-      
-      self_type operator++(int junk) {
-        assert(fp != nullptr);
-        fp = fp->pred;
-        return *this;
-      }
-      
-      reference operator*() {
-        return *fp;
-      }
-      
-      pointer operator->() {
-        return fp;
-      }
-      
-      bool operator==(const self_type& rhs) {
-        return fp == rhs.fp;
-      }
-      
-      bool operator!=(const self_type& rhs) {
-        return fp != rhs.fp;
-      }
-
-    };
-
-    iterator iterator_begin(frame_header_type* fp) {
-      return iterator(fp);
-    }
-
-    iterator iterator_begin(stack_type s) {
-      return iterator_begin(s.fp);
-    }
-
-    iterator iterator_end() {
-      return iterator(nullptr);
-    }
-
-    /* Iterators */
     /*------------------------------*/
 
   } // end namespace
