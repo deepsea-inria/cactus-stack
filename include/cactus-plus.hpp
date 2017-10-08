@@ -187,6 +187,80 @@ namespace cactus_stack {
       }
       
       reference operator*() {
+        assert(fp != nullptr);
+        return *fp;
+      }
+      
+      pointer operator->() {
+        return fp;
+      }
+      
+      bool operator==(const self_type& rhs) {
+        return fp == rhs.fp;
+      }
+      
+      bool operator!=(const self_type& rhs) {
+        return fp != rhs.fp;
+      }
+
+    };
+
+    class mark_iterator {
+    private:
+
+      frame_header_type* mhd;
+
+      frame_header_type* mtl;
+
+      frame_header_type* fp;
+      
+    public:
+      
+      using self_type = mark_iterator;
+      
+      using value_type = frame_header_type;
+
+      using reference = value_type&;
+
+      using pointer = value_type*;
+
+      using difference_type = int;
+
+      using iterator_category = std::bidirectional_iterator_tag;
+      
+      mark_iterator (frame_header_type* mhd,
+                     frame_header_type* mtl,
+                     frame_header_type* fp)
+        : mhd(mhd), mtl(mtl), fp(fp) { }
+      
+      self_type operator++() {
+        self_type i = *this;
+        assert(fp != nullptr);
+        fp = fp->ext.pred;
+        return i;
+      }
+      
+      self_type operator++(int junk) {
+        assert(fp != nullptr);
+        fp = fp->ext.pred;
+        return *this;
+      }
+
+      self_type operator--() {
+        self_type i = *this;
+        assert(fp != nullptr);
+        fp = fp->ext.succ;
+        return i;
+      }
+      
+      self_type operator--(int junk) {
+        assert(fp != nullptr);
+        fp = fp->ext.succ;
+        return *this;
+      }
+
+      reference operator*() {
+        assert(fp != nullptr);
         return *fp;
       }
       
@@ -222,6 +296,14 @@ namespace cactus_stack {
 
       iterator end() {
         return iterator(nullptr);
+      }
+
+      mark_iterator begin_mark() {
+        return mark_iterator(mhd, mtl, mtl);
+      }
+
+      mark_iterator end_mark() {
+        return mark_iterator(mhd, mtl, nullptr);
       }
       
     };
@@ -275,7 +357,7 @@ namespace cactus_stack {
         }
         return t;
       }
-      
+
       stack_type pop_mark_back(stack_type s) {
         assert(! empty_mark(s));
         stack_type t = s;
@@ -472,6 +554,7 @@ namespace cactus_stack {
         pf2 = s.mhd;
         s1.mhd = nullptr;
       }
+      pf2->ext.clt = Call_link_sync;
       frame_header_type* pf1 = pf2->pred;
       s1.fp = pf1;
       chunk_type* cf1 = chunk_of(pf1);
