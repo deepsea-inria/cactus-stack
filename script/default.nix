@@ -1,16 +1,13 @@
 { pkgs   ? import <nixpkgs> {},
   stdenv ? pkgs.stdenv,
-  fetchurl
+  cactusStackSrc ? ../.
 }:
 
 stdenv.mkDerivation rec {
   name = "cactus-stack-${version}";
   version = "v1.0";
 
-  src = fetchurl {
-    url = "https://github.com/deepsea-inria/cactus-stack/archive/${version}.tar.gz";
-    sha256 = "0ab9wc0h94h69w7grzlpiq2vwz2823n1hq4cz1pccb6vpfi0771d";
-  };
+  src = cactusStackSrc;
 
   installPhase = ''
     mkdir -p $out/include/
