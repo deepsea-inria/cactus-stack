@@ -10,6 +10,8 @@
 #include <stdlib.h>
 #include <atomic>
 #include <assert.h>
+#include <new>
+#include <utility>
 
 #ifndef _CACTUS_STACK_BASIC_H_
 #define _CACTUS_STACK_BASIC_H_
