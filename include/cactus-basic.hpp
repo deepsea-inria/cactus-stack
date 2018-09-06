@@ -161,10 +161,12 @@ namespace cactus_stack {
     Frame* peek_back(stack_type s) {
       return (Frame*)frame_data(s.fp);
     }
-    
-    template <class Frame>
-    Frame* peek_mark(stack_type s) {
-      return (Frame*)frame_data(s.mhd);
+
+    template <class Frame_pred, class Frame_succ>
+    std::pair<Frame_pred*, Frame_succ*> peek_mark(stack_type s) {
+      auto fsucc = (Frame_succ*)frame_data(s.mhd);
+      auto fpred = (Frame_pred*)frame_data(s.mhd->pred);
+      return std::make_pair(fsucc, fpred);
     }
     
     using parent_link_type = enum {
