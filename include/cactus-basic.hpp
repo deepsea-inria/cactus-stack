@@ -145,6 +145,67 @@ namespace cactus_stack {
       frame_header_type* fp, * sp, * lp;
       frame_header_type* mhd, * mtl;
     };
+
+    bool empty_mark(stack_type s) {
+      return s.mhd == nullptr;
+    }
+
+    bool is_mark_frame(frame_header_type* fp) {
+      assert(fp != nullptr);
+      return fp->ext.clt == Call_link_async;
+    }
+
+    stack_type pop_mark_back(stack_type s) {
+      assert(! empty_mark(s));
+      stack_type t = s;
+      frame_header_type* succ = t.mtl;
+      frame_header_type* pred = succ->ext.pred;
+      if (pred == nullptr) {
+        t.mhd = nullptr;
+      } else {
+        pred->ext.succ = nullptr;
+        succ->ext.pred = nullptr;
+      }
+      t.mtl = pred;
+      return t;
+    }
+
+    stack_type pop_mark_front(stack_type s) {
+      assert(! empty_mark(s));
+      stack_type t = s;
+      frame_header_type* pred = t.mhd;
+      frame_header_type* succ = pred->ext.succ;
+      if (succ == nullptr) {
+        t.mtl = nullptr;
+      } else {
+        succ->ext.pred = nullptr;
+        pred->ext.succ = nullptr;
+      }
+      t.mhd = succ;
+      return t;
+    }
+
+    stack_type try_pop_mark_back(stack_type s) {
+      stack_type t = s;
+      if (empty_mark(t)) {
+        return t;
+      }
+      if (! is_mark_frame(s.mtl)) {
+        t = pop_mark_back(t);
+      }
+      return t;
+    }
+
+    stack_type try_pop_mark_front(stack_type s) {
+      stack_type t = s;
+      if (empty_mark(t)) {
+        return t;
+      }
+      if (! is_mark_frame(t.mhd)) {
+        t = pop_mark_front(t);
+      }
+      return t;
+    }
     
     stack_type create_stack() {
       return {
@@ -274,7 +335,10 @@ namespace cactus_stack {
       s2.mhd = pf2;
       pf1->ext.succ = nullptr;
       pf2->pred = nullptr;
+
       pf2->ext.pred = nullptr;
+      s1 = try_pop_mark_back(s1);
+      s2 = try_pop_mark_front(s2);
       return std::make_pair(s1, s2);
     }
  

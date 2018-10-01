@@ -17,7 +17,7 @@
 namespace cactus_stack {
   namespace plus {
     
-    namespace {
+
       
       /*------------------------------*/
       /* Forward declarations */
@@ -106,19 +106,19 @@ namespace cactus_stack {
       /*------------------------------*/
       /* Frame */
       
-      using call_link_type = enum {
+      using call_link_type = enum call_link_enum {
         Call_link_async, Call_link_sync
       };
       
-      using loop_link_type = enum {
+      using loop_link_type = enum loop_link_enum {
         Loop_link_child, Loop_link_none
       };
       
-      using shared_frame_type = enum {
+      using shared_frame_type = enum shared_frame_enum {
         Shared_frame_direct, Shared_frame_indirect
       };
       
-      using frame_header_ext_type = struct {
+      using frame_header_ext_type = struct frame_header_ext_struct {
         call_link_type clt;
         loop_link_type llt;
         shared_frame_type sft;
@@ -146,7 +146,7 @@ namespace cactus_stack {
       /* Frame */
       /*------------------------------*/
       
-    } // end namespace
+
     
     /*------------------------------*/
     /* Stack-frame iterator */
